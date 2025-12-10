@@ -38,14 +38,14 @@ def main(params, args):
     """
     task = args.task
     if task == "train":
-        framework = params['framework']['name']
+        framework = params['meta']['name']
         if framework == "vfad":
             from src.vfad.train import main as vfad_train
             vfad_train(params, args)
         else:
             raise NotImplementedError(f"Pretraining for framework {framework} is not implemented.")
     elif task == "eval":
-        framework = params['framework']['name']
+        framework = params['meta']['name']
     else:
         raise ValueError(f"Unknown task: {task}")
 

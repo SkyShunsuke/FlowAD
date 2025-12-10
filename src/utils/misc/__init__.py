@@ -27,3 +27,4 @@ def save_yaml_config(config, save_path):
     logger.info(f'Saving configuration to {save_path}')
     with open(save_path, 'w') as outfile:
         yaml.dump(config, outfile, default_flow_style=False)
+        

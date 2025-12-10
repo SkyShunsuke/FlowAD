@@ -1,13 +1,15 @@
+meta: 
+  name: vfad
 data:
   data_root: data/mvtec_ad
-  dataset_name: mvtec_ad_all
-  category: all
+  dataset_name: mvtec_ad
+  category: bottle
   train_batch_size: 8 # per GPU batch size for training
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
   persistent_workers: False
-  img_size: 224
+  img_size: 256
   transform_type: imagenet
 opt:
   epochs: 5
@@ -35,6 +37,19 @@ flow_matching:
   solver:
     name: euler
 model:
+  backbone: 
+    model_name: efficientnet-b4
+    pretrained: true
+    outblocks:
+      - 1
+      - 5
+      - 9
+      - 21
+    outstrides: 
+      - 2
+      - 4
+      - 8
+      - 16
   model_name: dit
   patch_size: 1
   cond_channels: 384

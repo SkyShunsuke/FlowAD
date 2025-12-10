@@ -9,13 +9,13 @@ import torch
 from torch import Tensor
 from torch.func import jvp, vmap
 
-from flow_matching.path.path import ProbPath
+from src.flow_matching.path.path import ProbPath
 
-from flow_matching.path.path_sample import PathSample
-from flow_matching.path.scheduler import ConvexScheduler
-from flow_matching.utils import expand_tensor_like
+from src.flow_matching.path.path_sample import PathSample
+from src.flow_matching.path.scheduler import ConvexScheduler
+from src.flow_matching.utils import expand_tensor_like
 
-from flow_matching.utils.manifolds import geodesic, Manifold
+from src.flow_matching.utils.manifolds import geodesic, Manifold
 
 
 class GeodesicProbPath(ProbPath):

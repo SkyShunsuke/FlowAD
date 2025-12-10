@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 
 from torch import Tensor
 
-from flow_matching.path.path_sample import PathSample
+from src.flow_matching.path.path_sample import PathSample
 
 
 class ProbPath(ABC):

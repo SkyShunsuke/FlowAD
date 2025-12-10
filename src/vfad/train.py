@@ -9,14 +9,14 @@ import numpy as np
 import argparse
 import yaml
 import logging
-from torch.cuda import CUDAEvent
+from torch.cuda import Event as CUDAEvent
 
 from src.models import init_model
 from src.datasets import build_dataset
 from src.backbones import get_backbone, get_backbone_feature_shape
 from src.flow_matching import VelocityField
-from src.utils.dist import init_distributed_mode, get_rank, get_world_size
-from src.utils.dist import is_main_process as is_main
+from src.utils.distributed import init_distributed_mode, get_rank, get_world_size
+from src.utils.distributed import is_main_process as is_main
 from src.utils.log import setup_logging, get_logger, AverageMeter
 from src.utils.opt.optimizer import build_optimizer, save_checkpoint, load_checkpoint
 from src.utils.opt.scheduler import get_cosine_wd_scheduler, get_warmup_cosine_lr_scheduler
@@ -113,11 +113,15 @@ def main(params, args):
     np.random.seed(seed)
     
     logger.info(f"Building datasets... with config: \\ {params['data']}")
-    train_bs = params['data']['batch_size']
+    train_bs = params['data']['train_batch_size']
     test_bs = params['data'].get('test_batch_size', train_bs)
     train_dataset = build_dataset(train=True, **params['data'])
     test_dataset = build_dataset(train=False, **params['data'])
-    num_classes = train_dataset.num_classes
+    
+    if isinstance(train_dataset, torch.utils.data.ConcatDataset):
+        num_classes = len(train_dataset.datasets)
+    else:
+        num_classes = 1
     logger.info(f"Number of classes: {num_classes}")
     
     train_sampler = torch.utils.data.distributed.DistributedSampler(
@@ -154,14 +158,14 @@ def main(params, args):
                 f"Iterations per epoch: {ipe}")
     
     # build model
-    feat_sz = get_backbone_feature_shape(model_name=params['backbone']['model_name'])
-    fe = get_backbone(**params['backbone'])
+    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
+    fe = get_backbone(**params['model']['backbone'])
     fe.to(device).eval()
-    logger.info(f"Backbone {params['backbone']['model_name']} initialized. "
-                f"Model summary: {str(fe)}")
+    logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized. "
+                f"Model summary: {fe}")
 
     logger.info(f"Using input shape {feat_sz} for the flow matching.")
-    model = init_model(model_name=params['model']['model_name'], input_sz=feat_sz, num_classes=num_classes, **params['model']).to(device)
+    model = init_model(input_sz=feat_sz, num_classes=num_classes, **params['model']).to(device)
     vf = VelocityField(
         model=model,
         input_sz=feat_sz,
@@ -171,13 +175,13 @@ def main(params, args):
         solver_params=params['flow_matching']['solver'].get('params', None),
     )
     logger.info(f"Velocity Field Model {params['model']['model_name']} has been initialized.", 
-                f"Model summary: {str(vf)}")
+                f"Model summary: {vf}")
     
     # optimizer, scheduler, scaler
     opt_params = params['opt']
     num_epochs = opt_params['epochs']
     optimizer = build_optimizer(
-        mode=vf,
+        model=vf,
         optimizer_name=opt_params['name'],
         bias_decay=opt_params['bias_decay'],
         norm_decay=opt_params['norm_decay'],
@@ -255,7 +259,7 @@ def main(params, args):
             
             torch.cuda.synchronize()
             fe_time = start.elapsed_time(end)  # [ms]
-            fe_time_meter.update(fe_time)
+            fe_time_meter.step(fe_time)
 
             # -- fwd pass of VF
             with torch.amp.autocast("cuda", enabled=opt_params['use_bfloat16']):
@@ -264,7 +268,7 @@ def main(params, args):
                 end.record()
             torch.cuda.synchronize()
             vf_time = start.elapsed_time(end)  # [ms]
-            vf_time_meter.update(vf_time)
+            vf_time_meter.step(vf_time)
             
             # -- backward pass and optimization step
             optimizer.zero_grad()
@@ -357,16 +361,17 @@ def main(params, args):
             
             # -- log eval results
             if is_main():
+                log_step = epoch * ipe
                 if use_csv:
                     eval_log_dict = {'epoch': epoch}
                     eval_log_dict.update(eval_results)
-                    csv_logger.log_metrics(eval_log_dict, step=epoch)
+                    csv_logger.log_metrics(eval_log_dict, step=log_step)
                 
                 if use_tensorboard:
-                    tensorboard_logger.log_metrics(eval_results, step=epoch)
+                    tensorboard_logger.log_metrics(eval_results, step=log_step)
                 
                 if use_wandb:
-                    wandb_logger.log_metrics(eval_results, step=epoch)
+                    wandb_logger.log_metrics(eval_results, step=log_step)
         
         # -- save checkpoint
         if epoch % params['logging']['ckpt']['ckpt_epoch_freq'] == 0 and is_main():

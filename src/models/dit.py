@@ -261,7 +261,8 @@ class DiT(nn.Module):
         num_classes=15,
         use_class_labels=False,
         learn_sigma=False,
-        pos_embed: PosEmbedding = None
+        pos_embed: PosEmbedding = None,
+        **kwargs
     ):
         super().__init__()
         assert input_sz[1] == input_sz[2], "input height and width must be equal"

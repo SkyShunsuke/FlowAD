@@ -2,9 +2,9 @@ import tqdm
 import torch
 import torch.nn as nn
 
-from flow_matching.path.scheduler import CondOTScheduler
-from flow_matching.path import AffineProbPath
-from flow_matching.solver import Solver, ODESolver
+from src.flow_matching.path.scheduler import CondOTScheduler
+from src.flow_matching.path import AffineProbPath
+from src.flow_matching.solver import Solver, ODESolver
 
 import logging
 logger = logging.getLogger(__name__)
@@ -21,14 +21,16 @@ def build_scheduler(scheduler_name: str, scheduler_params: dict) -> CondOTSchedu
     """
     logger.info(f'Building scheduler: {scheduler_name} with params: {scheduler_params}')
     if scheduler_name == 'affine_prob':
-        return AffineProbPath(**scheduler_params)
+        scheduler = CondOTScheduler(**scheduler_params)
+        return AffineProbPath(scheduler)
     else:
         raise ValueError(f'Unknown scheduler name: {scheduler_name}')
     
-def build_solver(solver_name: str, solver_params: dict) -> Solver:
+def build_solver(model: nn.Module, solver_name: str, solver_params: dict) -> Solver:
     """Build solver for flow matching.
 
     Args:
+        model (nn.Module): The velocity model.
         solver_name (str): Name of the solver.
         solver_params (dict): Parameters for the solver.
 
@@ -36,7 +38,7 @@ def build_solver(solver_name: str, solver_params: dict) -> Solver:
         Solver: Configured solver.
     """
     logger.info(f'Building solver: {solver_name} with params: {solver_params}')
-    return ODESolver(**solver_params)
+    return ODESolver(model, **solver_params)
 
 class VelocityField(nn.Module):
     def __init__(self, model: nn.Module, input_sz: tuple, scheduler_name: str,  solver_name: str, \
@@ -71,7 +73,7 @@ class VelocityField(nn.Module):
         self.model = model
         self.input_sz = input_sz
         self.path = build_scheduler(scheduler_name, scheduler_params or {})
-        self.solver = build_solver(solver_name, solver_params or {})
+        self.solver = build_solver(model, solver_name, solver_params or {})
         
     def forward(self, x1, y=None):
         """Compute the loss for flow matching.
@@ -114,7 +116,7 @@ class VelocityField(nn.Module):
             x1_inter = vf.sample(x0, y, steps=10, return_intermediate=True)  # List of intermediate results
         """
         # - build solver
-        solver = build_solver(solver_name, solver_params or {})
+        solver = build_solver(self.model, solver_name, solver_params or {})
 
         # - define timesteps
         timesteps = torch.linspace(0., 1., steps).to(x0.device)
@@ -128,6 +130,7 @@ class VelocityField(nn.Module):
             method=solver_name,
             step_size=step_size,
             return_intermediate=True,
+            y=y,
         )  
         if return_intermediate:
             return samples  # List of intermediate results
@@ -150,7 +153,7 @@ class VelocityField(nn.Module):
             x0 = vf.invert(x1, y, steps=10)  # (batch_size, *input_sz)
         """
         # - build solver
-        solver = build_solver(solver_name, solver_params or {})
+        solver = build_solver(self.model, solver_name, solver_params or {})
 
         # - define timesteps
         timesteps = torch.tensor([1.0, 0.0]).to(x1.device)
@@ -163,11 +166,15 @@ class VelocityField(nn.Module):
             method=solver_name,
             step_size=step_size,
             return_intermediate=True,
+            y=y,
         )  
         if return_intermediate:
             return samples  # List of intermediate results
         else:
-            return samples[-1]  # Final result
+            if isinstance(samples, list):
+                return samples[-1]  # Final result
+            else:
+                return samples
     
     def log_prob(self, x1, y, steps: int, solver_name: str='euler', solver_params: dict=None, exact: bool=False, hte_acc: int=10):
         """Estimate the log-probability of the data points using the velocity field.

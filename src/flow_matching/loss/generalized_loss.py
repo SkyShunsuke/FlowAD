@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 from torch.nn.modules.loss import _Loss
 
-from flow_matching.path import MixtureDiscreteProbPath
+from src.flow_matching.path import MixtureDiscreteProbPath
 
 
 class MixturePathGeneralizedKL(_Loss):

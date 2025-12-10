@@ -6,8 +6,8 @@
 
 from torch import Tensor
 
-from flow_matching.path.scheduler.scheduler import Scheduler
-from flow_matching.utils import ModelWrapper
+from src.flow_matching.path.scheduler.scheduler import Scheduler
+from src.flow_matching.utils import ModelWrapper
 
 
 class ScheduleTransformedModel(ModelWrapper):

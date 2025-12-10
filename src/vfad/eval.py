@@ -3,11 +3,11 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 
-from src.utils.dist import concat_all_gather
+from src.utils.distributed import concat_all_gather
 from src.flow_matching import VelocityField
 
 from sklearn.metrics import roc_auc_score, average_precision_score
-from src.utils.adeval.adeval import EvalAccumulatorCuda, metrics_dist
+from src.utils.adeval import EvalAccumulatorCuda, metrics_dist
 
 import logging
 logger = logging.getLogger(__name__)
@@ -87,22 +87,22 @@ def aggregate_px_values(
         np.ndarray: Aggregated image-level scores of shape (N,).
     """
     if agg_method == 'diff':
-        scores_min = px_values.reshape(px_values.shape[0], -1).min(axis=(1, 2))
-        scores_max = px_values.reshape(px_values.shape[0], -1).max(axis=(1, 2))
+        scores_min = px_values.min(axis=(1, 2))
+        scores_max = px_values.max(axis=(1, 2))
         scores = scores_max - scores_min
     elif agg_method == 'sum':
-        scores = px_values.reshape(px_values.shape[0], -1).sum(axis=(1, 2))
+        scores = px_values.sum(axis=(1, 2))
     elif agg_method == 'max':
-        scores = px_values.reshape(px_values.shape[0], -1).max(axis=(1, 2))
+        scores = px_values.max(axis=(1, 2))
     elif agg_method == 'mean':
-        scores = px_values.reshape(px_values.shape[0], -1).mean(axis=(1, 2))
+        scores = px_values.mean(axis=(1, 2))
     elif agg_method == 'median':
-        scores = np.median(px_values.reshape(px_values.shape[0], -1), axis=(1, 2))
+        scores = np.median(px_values, axis=(1, 2))
     elif agg_method == 'diff+sum':
-        scores_min = px_values.reshape(px_values.shape[0], -1).min(axis=(1, 2))
-        scores_max = px_values.reshape(px_values.shape[0], -1).max(axis=(1, 2))
+        scores_min = px_values.min(axis=(1, 2))
+        scores_max = px_values.max(axis=(1, 2))
         scores_diff = scores_max - scores_min
-        scores_sum = px_values.reshape(px_values.shape[0], -1).sum(axis=(1, 2))
+        scores_sum = px_values.sum(axis=(1, 2))
         normalized_diff = (scores_diff - scores_diff.min()) / (scores_diff.max() - scores_diff.min() + 1e-8)
         normalized_sum = (scores_sum - scores_sum.min()) / (scores_sum.max() - scores_sum.min() + 1e-8)
         scores = normalized_diff + normalized_sum
@@ -138,6 +138,8 @@ def calculate_img_metrics(
         labels_tensor = torch.from_numpy(gt_labels).to(torch.float32).cuda()
         f1, _ = f1_max_gpu_hist(scores_tensor, labels_tensor)
         results_dict['img_f1max'] = f1.item()
+        
+    return results_dict
 
 def calculate_px_metrics(
     gt_masks: np.ndarray,
@@ -145,7 +147,8 @@ def calculate_px_metrics(
     metrics: list,
     device: torch.device = torch.device('cuda'),
     distributed: bool = False,
-    accum_size: int = 10000
+    accum_size: int = 10000,
+    eps: float = 1e-8,
 ):
     """Calculate pixel-level anomaly detection metrics.
     Args:
@@ -158,7 +161,7 @@ def calculate_px_metrics(
     results_dict = {}
     gt_masks_flat = gt_masks.reshape(-1)
     pred_scores_flat = pred_scores.reshape(-1)
-    score_min, score_max = pred_scores_flat.min(), pred_scores_flat.max()
+    score_min, score_max = pred_scores_flat.min() - eps, pred_scores_flat.max() + eps
 
     # -- use adeval for AUROC and AUPRO, AUPR
     nb = len(gt_masks_flat) // accum_size + (1 if len(gt_masks_flat) % accum_size != 0 else 0)
@@ -180,7 +183,8 @@ def calculate_px_metrics(
     
     # -- use skleran for AP
     if 'px_ap' in metrics:
-        ap = average_precision_score(gt_masks_flat.astype(int), pred_scores_flat)
+        gt_bin = (gt_masks_flat == 255).astype(int)
+        ap = average_precision_score(gt_bin, pred_scores_flat)
         results_dict['px_ap'] = ap
         
     # -- use f1_max_gpu_hist for F1-max
@@ -230,8 +234,8 @@ def evaluate(
     Returns:
         dict: Dictionary containing evaluation metrics (e.g., AUROC, AUPR, F1-score) for each class.
     """
-    was_train = vf.model.training
-    vf.model.eval()
+    was_train = vf.training
+    vf.eval()
     
     # -- evaluation configuration
     steps = eval_params.get('steps', 1) if eval_params is not None else 1
@@ -250,24 +254,29 @@ def evaluate(
     anom_labels_all = np.zeros((N,), dtype=np.uint8)
     vel_residual_all = np.zeros((N, *img_sz), dtype=np.float32)
     
+    if distributed:
+        # -- extract the underlying model from DDP
+        vf = vf.module
+    
     logger.info("Extracting features and computing anomaly scores...")
     for step, batch in tqdm(enumerate(dataloader), total=len(dataloader), disable=not verbose):
+        current_idx = step * dataloader.batch_size
         
         # -- prepare data
         imgs, clslabels_local = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
         imgs, clslabels_local = imgs.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True)
-        anom_labels_local, anom_masks_local = batch['clsname'], batch['mask'] # (B,), (B, H, W)
+        anom_labels_local, anom_masks_local = batch['label'], batch['mask'] # (B,), (B, H, W)
         anom_labels_local, anom_masks_local = anom_labels_local.to(device, non_blocking=True), anom_masks_local.to(device, non_blocking=True)
         
         # -- extract features
-        z1 = extract_features(fe, imgs, device)  # (B, c, h, w)
+        z1, _ = extract_features(fe, imgs, device)  # (B, c, h, w)
         
         # -- inversion through the velocity field
         if use_bfloat16:
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                z0_local = vf.sample(z1, clslabels_local, steps=steps, solver_name=solver_name, solver_params=solver_params)# (B, c, h, w)
+                z0_local = vf.invert(z1, clslabels_local, steps=steps, solver_name=solver_name, solver_params=solver_params)# (B, c, h, w)
         else:
-            z0_local = vf.sample(z1, clslabels_local, steps=steps, solver_name=solver_name, solver_params=solver_params)  # (B, c, h, w)
+            z0_local = vf.invert(z1, clslabels_local, steps=steps, solver_name=solver_name, solver_params=solver_params)  # (B, c, h, w)
         
         # -- share results across GPUs
         if distributed:
@@ -290,11 +299,11 @@ def evaluate(
         
         # -- store results
         bs = vel_residual.shape[0]
-        vel_residual_all[step * bs: step * bs + bs] = vel_residual
-        clslabels_all[step * bs: step * bs + bs] = cls_labels.cpu().numpy().astype(np.uint8)
-        masks_all[step * bs: step * bs + bs] = anom_masks.cpu().numpy().astype(np.uint8)
-        anom_labels_all[step * bs: step * bs + bs] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
-        
+        vel_residual_all[current_idx: current_idx + bs] = vel_residual
+        clslabels_all[current_idx: current_idx + bs] = cls_labels.cpu().numpy().astype(np.uint8)
+        masks_all[current_idx: current_idx + bs] = anom_masks.cpu().numpy().astype(np.uint8)
+        anom_labels_all[current_idx: current_idx + bs] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
+    
     # -- compute anomaly scores
     px_scores = vel_residual_all  # (N, H, W)
     img_scores = aggregate_px_values(
@@ -343,6 +352,9 @@ def evaluate(
             eval_results[cls_name][met_name] = met_value
     
     logger.info(f"Evaluation completed. \\ Results: {eval_results}")
+    
+    if was_train:
+        vf.train()
     return eval_results
     
     

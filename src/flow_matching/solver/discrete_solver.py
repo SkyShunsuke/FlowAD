@@ -13,10 +13,10 @@ from torch import Tensor
 
 from torch.nn import functional as F
 
-from flow_matching.path import MixtureDiscreteProbPath
+from src.flow_matching.path import MixtureDiscreteProbPath
 
-from flow_matching.solver.solver import Solver
-from flow_matching.utils import categorical, ModelWrapper
+from src.flow_matching.solver.solver import Solver
+from src.flow_matching.utils import categorical, ModelWrapper
 from .utils import get_nearest_times
 
 try:

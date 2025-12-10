@@ -60,14 +60,16 @@ class CSVLogger:
             reader = csv.DictReader(self.csv_file)
             for old_row in reader:
                 writer.writerow(old_row)
-            
+
             tmp_file.flush()
             tmp_file.close()
 
             # Replace old file with new one
             self.csv_file.close()
             shutil.move(tmp_file.name, self.log_file)
-            self.csv_file = open(self.log_file, mode='a', newline='')
+
+            # IMPORTANT: open in read+append mode so DictReader can read next time
+            self.csv_file = open(self.log_file, mode='a+', newline='')
             self.writer = csv.DictWriter(self.csv_file, fieldnames=self.fieldnames)
         else:
             # Normal case: writer already initialized
@@ -106,7 +108,12 @@ class TensorboardLogger:
         """
         if self.use_tensorboard:
             for key, value in metrics.items():
-                self.writer.add_scalar(key, value, global_step=step)
+                if not isinstance(value, dict):
+                    self.writer.add_scalar(key, value, global_step=step)
+                else:
+                    for sub_key, sub_value in value.items():
+                        self.writer.add_scalar(f"{key}/{sub_key}", sub_value, global_step=step)
+                    
     
     def close(self):
         """Close the TensorBoard writer if this is the main process."""

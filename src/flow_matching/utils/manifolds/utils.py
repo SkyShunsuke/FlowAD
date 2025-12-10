@@ -9,7 +9,7 @@ from typing import Callable
 import torch
 from torch import Tensor
 
-from flow_matching.utils.manifolds import Manifold
+from src.flow_matching.utils.manifolds import Manifold
 
 
 def geodesic(

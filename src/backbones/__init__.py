@@ -83,8 +83,8 @@ def get_backbone_feature_shape(model_name):
     else:
         raise ValueError(f"Unsupported model type: {model_name}")
 
-def get_efficientnet(model_name, **kwargs):
-    return build_efficient(model_name, **kwargs)
+def get_efficientnet(**kwargs):
+    return build_efficient(**kwargs)
 
 def get_dino(model_name, **kwargs):
     if model_name == "dinov2-small":
@@ -179,7 +179,7 @@ def get_backbone_model(model_name):
         return get_pdn_medium()
 
 def get_backbone(**kwargs):
-    model_name = kwargs['model_type']
+    model_name = kwargs['model_name']
     if 'pdn_small' in model_name:
         net = get_pdn_small(**kwargs)
         return PDNWrapper(net)
@@ -188,7 +188,7 @@ def get_backbone(**kwargs):
         return PDNWrapper(net)
     elif 'efficientnet' in model_name:
         # net = get_efficientnet(model_name, pretrained=True, outblocks=[1, 5, 9, 21], outstrides=[2, 4, 8, 16])
-        net =  get_efficientnet(model_name, **kwargs)
+        net =  get_efficientnet(**kwargs)
         return BackboneWrapper(net, scale_factors=[0.125, 0.25, 0.5, 1.0])
         # return BackboneWrapper(net, target_size=(32, 32))
     elif 'dinov1' in model_name:

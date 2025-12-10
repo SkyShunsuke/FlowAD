@@ -6,10 +6,10 @@
 
 from torch import Tensor
 
-from flow_matching.path.path import ProbPath
-from flow_matching.path.path_sample import PathSample
-from flow_matching.path.scheduler.scheduler import CondOTScheduler, Scheduler
-from flow_matching.utils import expand_tensor_like
+from src.flow_matching.path.path import ProbPath
+from src.flow_matching.path.path_sample import PathSample
+from src.flow_matching.path.scheduler.scheduler import CondOTScheduler, Scheduler
+from src.flow_matching.utils import expand_tensor_like
 
 
 class AffineProbPath(ProbPath):
