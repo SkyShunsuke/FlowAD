@@ -18,10 +18,10 @@ opt:
   clip_grad: 1.0
   wd_start: 0.0000
   wd_end: 0.0000
-  lr_start: 0.000001
-  lr_warmup: 0.00005
+  lr_start: 0.0001
+  lr_warmup: 0.0005
   lr_warmup_epochs: 40
-  lr_end: 0.000005
+  lr_end: 0.000001
   fix_lr_thres: -1
   fix_wd_thres: -1
   fix_lr_strategy: const
@@ -53,17 +53,18 @@ model:
   model_name: dit
   patch_size: 1
   cond_channels: 768
-  hidden_size: 2048
-  depth: 16
+  hidden_size: 768
+  depth: 12
   num_heads: 8
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
   use_class_labels: False
   learn_sigma: False
+  t_scale: 1000
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_mc_ditG_enet_1211/
+  log_dir: logs/ad_mc_dit_enet_121204/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -76,7 +77,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_mc_ditG_enet_1211
+    run_name: ad_mc_dit_enet_121104
   eval:
     eval_epoch_freq: 25
     steps: 1

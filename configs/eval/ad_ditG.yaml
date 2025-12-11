@@ -34,8 +34,8 @@ model:
   model_name: dit
   patch_size: 1
   cond_channels: 768
-  hidden_size: 768
-  depth: 12
+  hidden_size: 2048
+  depth: 16
   num_heads: 8
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
@@ -43,13 +43,13 @@ model:
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_mc_dit_enet_1211/checkpoints/ckpt_epoch_300.pth
+  resume_path: ./logs/ad_mc_ditG_enet_1211/checkpoints/ckpt_epoch_300.pth
 logging:
-  log_dir: logs/ad_mc_dit_enet_1211/
+  log_dir: logs/ad_mc_ditG_enet_1211/
   eval:
-    eval_strategy: recon
+    eval_strategy: inversion  # options: 'density', 'recon', 'inversion'
     exact_divergence: False
-    steps: 10 
+    steps: 100
     # for density estimation if eval_strategy is 'density'
     hutchinson_samples: 10
     hutchinson_batch_size: 10

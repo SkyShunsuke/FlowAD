@@ -12,6 +12,9 @@ from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 
 from src.models.vision_transformer import PosEmbedding, get_unmasked_indices
 
+import logging
+logger = logging.getLogger(__name__)
+
 #################################################################################
 #                   Sine/Cosine Positional Embedding Functions                  #
 #################################################################################
@@ -73,15 +76,17 @@ class TimestepEmbedder(nn.Module):
     """
     Embeds scalar timesteps into vector representations.
     """
-    def __init__(self, hidden_size, frequency_embed_size=256):
+    def __init__(self, hidden_size, frequency_embed_size=256, t_scale=1.0):
         super().__init__()
         self.hidden_size = hidden_size
         self.frequency_embed_size = frequency_embed_size
+        self.t_scale = t_scale
         self.mlp = nn.Sequential(
             nn.Linear(frequency_embed_size, hidden_size, bias=True),
             nn.SiLU(),
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
+        logger.info(f"**Timestep will be scaled by t_scale={t_scale} before embedding. Make sure this is intended. **")
     
     @staticmethod
     def timestep_embedding(t, dim, max_period=10000):
@@ -104,6 +109,7 @@ class TimestepEmbedder(nn.Module):
         return embedding
     
     def forward(self, t):
+        t = self.t_scale * t
         t_freq = self.timestep_embedding(t, self.frequency_embed_size)  # (B, D)
         t_emb = self.mlp(t_freq)
         return t_emb
@@ -262,6 +268,7 @@ class DiT(nn.Module):
         use_class_labels=False,
         learn_sigma=False,
         pos_embed: PosEmbedding = None,
+        t_scale=1.0,
         **kwargs
     ):
         super().__init__()
@@ -279,10 +286,11 @@ class DiT(nn.Module):
         self.num_classes = num_classes
         self.use_class_labels = use_class_labels
         self.learn_sigma = learn_sigma
+        self.t_scale = t_scale
         
         self.x_embedder = PatchEmbed(self.input_size, patch_size, self.in_channels, hidden_size)
         self.x_embedder_linear = nn.Linear(self.in_channels, hidden_size, bias=True)
-        self.t_embedder = TimestepEmbedder(hidden_size)
+        self.t_embedder = TimestepEmbedder(hidden_size, t_scale=t_scale)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         
         num_patches = self.x_embedder.num_patches
