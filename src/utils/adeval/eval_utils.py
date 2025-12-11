@@ -14,6 +14,24 @@ SUPPORTED_METRICS = [
     'px_auroc', 'px_aupr', 'px_f1max', 'px_ap', 'px_pro'
 ]
 
+@torch.no_grad()
+def extract_features(
+    fe: torch.nn.Module,
+    imgs: torch.Tensor,
+    device: torch.device,
+):
+    """Extract features using the feature extractor.
+    Args:
+        fe: Feature extractor model.
+        imgs: Input images tensor of shape (B, C, H, W).
+        device: Device to perform computation on.
+    Returns:
+        torch.Tensor: Extracted features tensor.
+    """
+    imgs = imgs.to(device, non_blocking=True)
+    features = fe(imgs)
+    return features
+
 def aggregate_px_values(
     agg_method: str,
     px_values: np.ndarray,

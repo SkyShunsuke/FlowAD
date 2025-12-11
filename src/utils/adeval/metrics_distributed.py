@@ -1,6 +1,6 @@
 import torch
 import torch.distributed as dist
-from src.utils.dist import concat_all_gather
+from src.utils.distributed import concat_all_gather
 
 @torch.no_grad()
 def f1_max_gpu_hist(scores: torch.Tensor,
