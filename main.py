@@ -46,6 +46,9 @@ def main(params, args):
             raise NotImplementedError(f"Pretraining for framework {framework} is not implemented.")
     elif task == "eval":
         framework = params['meta']['name']
+        if framework == "vfad":
+            from src.vfad.eval import main as vfad_eval
+            vfad_eval(params, args)
     else:
         raise ValueError(f"Unknown task: {task}")
 

@@ -9,6 +9,7 @@ from typing import Callable, Optional, Sequence, Tuple, Union
 import torch
 from torch import Tensor
 from torchdiffeq import odeint
+from torch import autograd
 
 from src.flow_matching.solver.solver import Solver
 from src.flow_matching.utils import gradient, ModelWrapper
@@ -161,22 +162,43 @@ class ODESolver(Solver):
                     for i in range(ut.flatten(1).shape[1]):
                         div += gradient(ut[:, i], xt, create_graph=True)[:, i].detach()
                 else:
-                    # Compute Hutchinson divergence estimator E[z^T D_x(ut) z]
-                    ut_dot_z = torch.einsum(
-                        "ij,ij->i", ut.flatten(start_dim=1), z.flatten(start_dim=1)
-                    )
-                    grad_ut_dot_z = gradient(ut_dot_z, xt)
-                    div = torch.einsum(
-                        "ij,ij->i",
-                        grad_ut_dot_z.flatten(start_dim=1),
-                        z.flatten(start_dim=1),
-                    )
+                    if xt.dim() == 4:
+                        # -- dotproduct wrt channels
+                        ut_dot_z = torch.sum(ut * z, dim=1)
+                        grad_ut_dot_z = autograd.grad(
+                            outputs=ut_dot_z,
+                            inputs=xt,
+                            grad_outputs=torch.ones_like(ut_dot_z),
+                            create_graph=True,
+                            retain_graph=True 
+                        )[0]
+                        div = torch.sum(grad_ut_dot_z * z, dim=1)
+                    elif xt.dim() == 2:
+                        # Compute Hutchinson divergence estimator E[z^T D_x(ut) z]
+                        ut_dot_z = torch.einsum(
+                            "ij,ij->i", ut.flatten(start_dim=1), z.flatten(start_dim=1)
+                        )
+                        grad_ut_dot_z = gradient(ut_dot_z, xt)
+                        div = torch.einsum(
+                            "ij,ij->i",
+                            grad_ut_dot_z.flatten(start_dim=1),
+                            z.flatten(start_dim=1),
+                        )
+                    else:
+                        raise NotImplementedError(
+                            f"Hutchinson divergence not implemented for input with {xt.dim()} dimensions."
+                        )
             if enable_grad:
                 return ut, div
             else:
                 return ut.detach(), div.detach()
 
-        y_init = (x_1, torch.zeros(x_1.shape[0], device=x_1.device))
+        if x_1.dim() == 4:
+            b, _, h, w = x_1.shape
+            log_det_init = torch.zeros((b, h, w), device=x_1.device)
+            y_init = (x_1, log_det_init)
+        else:
+            y_init = (x_1, torch.zeros(x_1.shape[0], device=x_1.device))
         ode_opts = {"step_size": step_size} if step_size is not None else {}
 
         with torch.set_grad_enabled(enable_grad):

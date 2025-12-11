@@ -1,0 +1,77 @@
+meta: 
+  name: vfad
+  global_seed: 0
+  use_bfloat16: True
+data:
+  data_root: data/mvtec_ad
+  dataset_name: mvtec_ad_all 
+  category: all
+  test_batch_size: 32 # per GPU batch size for evaluation
+  num_workers: 8
+  pin_memory: True
+  persistent_workers: False
+  img_size: 256
+  transform_type: imagenet
+flow_matching:
+  scheduler: 
+    name: affine_prob
+  solver:
+    name: euler
+model:
+  backbone: 
+    model_name: efficientnet-b4
+    pretrained: true
+    outblocks:
+      - 1
+      - 5
+      - 9
+      - 21
+    outstrides: 
+      - 2
+      - 4
+      - 8
+      - 16
+  model_name: dit
+  patch_size: 1
+  cond_channels: 768
+  hidden_size: 768
+  depth: 12
+  num_heads: 8
+  mlp_ratio: 4.0
+  class_dropout_prob: 0.0
+  use_class_labels: False
+  learn_sigma: False
+resume:
+  resume_path: ./logs/ad_mc_dit_enet_1211/checkpoints/ckpt_epoch_300.pth
+logging:
+  log_dir: logs/ad_mc_dit_enet_1211/
+  eval:
+    eval_strategy: recon
+    exact_divergence: False
+    steps: 10 
+    # for density estimation if eval_strategy is 'density'
+    hutchinson_samples: 10
+    hutchinson_batch_size: 10
+    # for reconstruction if eval_strategy is 'recon'
+    inv_steps: 100
+    recon_steps: 100  # for reconstruction, we use inv/recon steps instead of 'steps'
+    inv_stop_time: 0.4
+    solver_name: euler
+    img_score_agg: diff+sum
+    metrics: 
+      - img_auroc
+      - img_ap
+      - img_f1max
+      - px_auroc
+      - px_ap
+      - px_f1max
+      - px_aupro
+
+    
+
+
+
+
+
+
+  

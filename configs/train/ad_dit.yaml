@@ -2,8 +2,8 @@ meta:
   name: vfad
 data:
   data_root: data/mvtec_ad
-  dataset_name: mvtec_ad
-  category: bottle
+  dataset_name: mvtec_ad_all 
+  category: all
   train_batch_size: 8 # per GPU batch size for training
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
@@ -12,7 +12,7 @@ data:
   img_size: 256
   transform_type: imagenet
 opt:
-  epochs: 5
+  epochs: 300
   name: adamw
   ipe_scale: 1.0
   clip_grad: 1.0
@@ -52,9 +52,9 @@ model:
       - 16
   model_name: dit
   patch_size: 1
-  cond_channels: 384
-  hidden_size: 384
-  depth: 4
+  cond_channels: 768
+  hidden_size: 2048
+  depth: 16
   num_heads: 8
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
@@ -63,7 +63,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/test/
+  log_dir: logs/ad_mc_ditG_enet_1211/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -76,9 +76,9 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: test
+    run_name: ad_mc_ditG_enet_1211
   eval:
-    eval_epoch_freq: 1
+    eval_epoch_freq: 25
     steps: 1
     solver_name: euler
     img_score_agg: diff+sum
@@ -89,6 +89,7 @@ logging:
       - px_auroc
       - px_ap
       - px_f1max
+      - px_aupro
 
     
 

@@ -21,23 +21,10 @@ from src.utils.log import setup_logging, get_logger, AverageMeter
 from src.utils.opt.optimizer import build_optimizer, save_checkpoint, load_checkpoint
 from src.utils.opt.scheduler import get_cosine_wd_scheduler, get_warmup_cosine_lr_scheduler
 from src.utils.opt.scaler import get_gradient_scaler
-from src.vfad.eval import evaluate as eval
+from src.vfad.eval import evaluate_inv as eval
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger()
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="InvAD Training")
-    
-    parser.add_argument('--config_path', type=str, default='configs/config.yaml', help='Path to the config file')
-    parser.add_argument(
-        "--devices", type=str, nargs="+", default=["cuda:0"],
-    )
-    parser.add_argument(
-        "--port", type=int, default=29500,
-    )
-    args = parser.parse_args()
-    return args
 
 def main(params, args):
     """XXX for VFAD training.
@@ -161,8 +148,7 @@ def main(params, args):
     feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
     fe = get_backbone(**params['model']['backbone'])
     fe.to(device).eval()
-    logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized. "
-                f"Model summary: {fe}")
+    logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized.")
 
     logger.info(f"Using input shape {feat_sz} for the flow matching.")
     model = init_model(input_sz=feat_sz, num_classes=num_classes, **params['model']).to(device)
@@ -174,8 +160,7 @@ def main(params, args):
         scheduler_params=params['flow_matching']['scheduler'].get('params', None),
         solver_params=params['flow_matching']['solver'].get('params', None),
     )
-    logger.info(f"Velocity Field Model {params['model']['model_name']} has been initialized.", 
-                f"Model summary: {vf}")
+    logger.info(f"Velocity Field Model {params['model']['model_name']} has been initialized.")
     
     # optimizer, scheduler, scaler
     opt_params = params['opt']
@@ -411,82 +396,7 @@ def main(params, args):
     dist.destroy_process_group()
 
     # -- end of main
-    logger.info("Training completed. Training results are saved in %s", log_dir)
-        
-    #     if (epoch + 1) % config["evaluation"]["eval_interval"] == 0:
-    #         all_results = {}
-    #         categories = [ds.category for ds in anom_dataset.datasets]
-    #         for anom_loader, normal_loader in zip(anom_loaders, normal_loaders):
-    #             logger.info(f"Evaluating on {anom_loader.dataset.category} dataset")
-    #             metrics_dict = evaluate.evaluate_dist(
-    #                 vf,
-    #                 fe,
-    #                 anom_loader,
-    #                 normal_loader,
-    #                 config, 
-    #                 diff_in_sh,
-    #                 epoch + 1,
-    #                 config["evaluation"]["eval_step"],
-    #                 device,
-    #                 world_size=world_size,
-    #                 rank=rank,
-    #             )
-    #             if rank == 0:
-    #                 all_results.update(metrics_dict)
-    #             dist.barrier()  # wait for all processes to finish evaluation
-            
-    #         # Compute average AUC across all categories
-    #         avg_results = {}
-    #         keys = ["I-AUROC", "I-AP", "I-F1Max", "P-AUROC", "P-AP", "P-F1Max", "PRO", "mAD"]
-    #         for key in keys:
-    #             avg_results[key] = np.mean([all_results[cat][key] for cat in all_results.keys()])
-    #         logger.info(f"Average results: {avg_results}")
-            
-    #         if rank == 0:
-    #             current_auc = avg_results["I-AUROC"]
-    #             if current_auc > best_auc:
-    #                 best_auc = current_auc
-    #                 save_path = save_dir / f"model_best.pth"
-    #                 torch.save(vf.state_dict(), save_path)
-    #                 logger.info(f"Model is saved at {save_dir}")
-
-    #             if use_wandb:
-    #                 for cat in categories:
-    #                     wandb.log({
-    #                         f"{cat}/I-AUROC": all_results[cat]["I-AUROC"],
-    #                         f"{cat}/I-AP": all_results[cat]["I-AP"],
-    #                         f"{cat}/I-F1Max": all_results[cat]["I-F1Max"],
-    #                         f"{cat}/P-AUROC": all_results[cat]["P-AUROC"],
-    #                         f"{cat}/P-AP": all_results[cat]["P-AP"],
-    #                         f"{cat}/P-F1Max": all_results[cat]["P-F1Max"],
-    #                         f"{cat}/PRO": all_results[cat]["PRO"],
-    #                         f"{cat}/mAD": all_results[cat]["mAD"]
-    #                     })
-                    
-    #                 wandb.log({
-    #                     "I-AUROC": current_auc,
-    #                     "I-AP": avg_results["I-AP"],
-    #                     "I-F1Max": avg_results["I-F1Max"],
-    #                     "P-AUROC": avg_results["P-AUROC"],
-    #                     "P-AP": avg_results["P-AP"],
-    #                     "P-F1Max": avg_results["P-F1Max"],
-    #                     "PRO": avg_results["PRO"],
-    #                     "mAD": avg_results["mAD"]
-    #                 })
-    #             logger.info(f"AUC: {current_auc} at epoch {epoch}")
-            
-    #         dist.barrier()  # wait for all processes to finish evaluation
-    # logger.info("Training is done!")
-    
-    # # save model
-    # save_path = save_dir / "model_latest.pth"
-    # torch.save(vf.state_dict(), save_path)
-    # save_path = save_dir / "model_ema_latest.pth"
-    # torch.save(model_ema.state_dict(), save_path)
-    # logger.info(f"Model is saved at {save_dir}")
-
-
-    
+    logger.info("Training completed. Training results are saved.")
     
     
         

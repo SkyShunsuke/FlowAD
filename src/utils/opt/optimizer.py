@@ -131,3 +131,17 @@ def load_checkpoint(
     logger.info(f'read-path: {resume_path}')
     del checkpoint
     return model, opt, scaler, epoch
+
+def load_model_only(
+    resume_path: str,
+    model: nn.Module,
+):
+    checkpoint = torch.load(resume_path, map_location=torch.device('cpu'), weights_only=True)
+
+    # -- loading model
+    pretrained_dict = checkpoint['model']
+    msg = model.load_state_dict(pretrained_dict)
+    logger.info(f'loaded pretrained model with msg: {msg}')
+    
+    del checkpoint
+    return model
