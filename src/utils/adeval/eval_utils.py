@@ -11,7 +11,7 @@ from src.utils.adeval import EvalAccumulatorCuda, f1_max_gpu_hist
 
 SUPPORTED_METRICS = [
     'img_auroc', 'img_aupr', 'img_f1max', 'img_ap',
-    'px_auroc', 'px_aupr', 'px_f1max', 'px_ap', 'px_pro'
+    'px_auroc', 'px_aupr', 'px_f1max', 'px_ap', 'px_aupro'
 ]
 
 @torch.no_grad()
