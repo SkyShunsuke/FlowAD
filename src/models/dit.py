@@ -10,6 +10,10 @@ import math
 from einops import rearrange
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 
+import torch.nn.functional as F
+torch.backends.cuda.enable_flash_sdp(True)        # SM80+, FP16/BF16
+torch.backends.cuda.enable_mem_efficient_sdp(True)  # fallback for SM75+
+
 from src.models.vision_transformer import PosEmbedding, get_unmasked_indices
 
 import logging
@@ -145,12 +149,6 @@ class LabelEmbedder(nn.Module):
             labels = self.token_drop(labels, force_drop_ids)
         embeddings = self.embedding_table(labels)
         return embeddings
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-torch.backends.cuda.enable_flash_sdp(True)        # SM80+, FP16/BF16
-torch.backends.cuda.enable_mem_efficient_sdp(True)  # fallback for SM75+
 
 class SDPAAttention(nn.Module):
     r"""Multi-Head Attention backed by F.scaled_dot_product_attention."""

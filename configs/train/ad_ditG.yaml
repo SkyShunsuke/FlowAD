@@ -2,8 +2,8 @@ meta:
   name: vfad
 data:
   data_root: data/mvtec_ad
-  dataset_name: mvtec_ad_all 
-  category: all
+  dataset_name: mvtec_ad
+  category: screw
   train_batch_size: 8 # per GPU batch size for training
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
@@ -27,7 +27,7 @@ opt:
   fix_lr_strategy: const
   fix_wd_strategy: const
   all_gather: False
-  use_bfloat16: True
+  use_bfloat16: False
   bias_decay: False
   norm_decay: False
   global_seed: 0
@@ -53,8 +53,8 @@ model:
   model_name: dit
   patch_size: 1
   cond_channels: 768
-  hidden_size: 768
-  depth: 12
+  hidden_size: 2048
+  depth: 16
   num_heads: 8
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
@@ -64,23 +64,23 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_mc_dit_enet_121300/
+  log_dir: logs/ad_sc_ditG_enet_121314/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
   log_stdout: True
   ckpt:
-    save_latest: True
-    ckpt_epoch_freq: 25
+    save_latest: False
+    ckpt_epoch_freq: 500
     save_best: True
   wandb: 
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_mc_dit_enet_121300
+    run_name: ad_sc_ditG_enet_121314
   eval:
     eval_epoch_freq: 25
-    steps: 1
+    steps: 3
     solver_name: euler
     img_score_agg: diff+sum
     metrics: 

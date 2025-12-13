@@ -177,6 +177,20 @@ def evaluate_density(
     num_classes = len(eval_results) - 1
     for met_name in eval_results['average'].keys():
         eval_results['average'][met_name] /= num_classes
+
+    # -- calculate averaged metrics (mad) for all classes
+    del_classes = []
+    for cls_name in eval_results.keys():
+        mad_sum = 0.0
+        for met_name, met_value in eval_results[cls_name].items():
+            mad_sum += met_value
+        if len(eval_results[cls_name]) > 0:
+            eval_results[cls_name]['mad'] = mad_sum / len(eval_results[cls_name])
+        else:
+            del_classes.append(cls_name)
+    
+    for cls_name in del_classes:
+        del eval_results[cls_name]
     
     logger.info(f"Evaluation completed. \\ Results: {eval_results}")
     

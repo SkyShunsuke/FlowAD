@@ -78,6 +78,10 @@ def evaluate_inv(
         
         # -- extract features
         z1, _ = extract_features(fe, imgs, device)  # (B, c, h, w)
+        # whitten
+        z1_mu = z1.mean(dim=(1,2,3), keepdim=True)
+        z1_sigma = z1.std(dim=(1,2,3), keepdim=True)
+        z1 = (z1 - z1_mu) / (z1_sigma + 1e-8)
         
         # -- inversion through the velocity field
         if use_bfloat16:
@@ -168,9 +172,23 @@ def evaluate_inv(
             if met_name not in eval_results['average']:
                 eval_results['average'][met_name] = 0.0
             eval_results['average'][met_name] += eval_results[cls_name][met_name]
-    num_classes = len(eval_results) - 1
+    num_classes = len(dataloader.dataset.datasets)
     for met_name in eval_results['average'].keys():
         eval_results['average'][met_name] /= num_classes
+        
+    # -- calculate averaged metrics (mad) for all classes
+    del_classes = []
+    for cls_name in eval_results.keys():
+        mad_sum = 0.0
+        for met_name, met_value in eval_results[cls_name].items():
+            mad_sum += met_value
+        if len(eval_results[cls_name]) > 0:
+            eval_results[cls_name]['mad'] = mad_sum / len(eval_results[cls_name])
+        else:
+            del_classes.append(cls_name)
+    
+    for cls_name in del_classes:
+        del eval_results[cls_name]
     
     logger.info(f"Evaluation completed. \\ Results: {eval_results}")
     

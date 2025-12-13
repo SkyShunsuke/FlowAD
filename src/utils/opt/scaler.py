@@ -7,4 +7,4 @@ def get_gradient_scaler(
     """
     Returns a GradScaler for mixed precision training.
     """
-    return GradScaler(device=device, enabled=use_bf16)
+    return GradScaler(device=device, enabled=(not use_bf16))

@@ -45,14 +45,14 @@ def build_transforms(img_size, transform_type):
 def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: int, transform_type: str, **kwargs):
     logger.info(f"Building dataset: {dataset_name}, train: {train}, img_size: {img_size}, transform: {transform_type}")
     if dataset_name == 'mvtec_ad':
-        return MVTecAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
-            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)
+        return ConcatDataset([MVTecAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'visa':
-        return VisA(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
-            transform=build_transforms(img_size, transform_type), is_mask=True, **kwargs)
+        return ConcatDataset([VisA(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, **kwargs)])
     elif dataset_name == 'mpdd':
-        return MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
-            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)
+        return ConcatDataset([MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_all':
         dss = []
         for cat in AD_CLASSES:

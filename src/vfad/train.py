@@ -208,16 +208,19 @@ def main(params, args):
         )
         logger.info(f"Resumed from checkpoint: {resume_path} at epoch {start_epoch}", 
                     "model and optimizer states are loaded.")
+    else:
+        # -- initial update for schedulers
+        wd_scheduler.step()
+        lr_scheduler.step()
 
     # -- evaluation setup
     eval_freq = params['logging']['eval']['eval_epoch_freq']
     eval_params = params['logging']['eval']
-
-    # -- initial update for schedulers
-    wd_scheduler.step()
-    lr_scheduler.step()
+    save_best = params['logging']['ckpt'].get('save_best', True)
 
     logger.info(f"Starting training for {num_epochs} epochs...")
+    best_mad = 0.0 if save_best else 1e4
+    
     for epoch in range(start_epoch, num_epochs + 1):
         logger.info(f"Starting epoch {epoch}/{num_epochs}")
 
@@ -241,6 +244,11 @@ def main(params, args):
             with torch.no_grad():
                 z1, _ = fe(imgs)  # (B, c, h, w)
             end.record()
+            
+            # whitten
+            z1_mu = z1.mean(dim=(1,2,3), keepdim=True)
+            z1_sigma = z1.std(dim=(1,2,3), keepdim=True)
+            z1 = (z1 - z1_mu) / (z1_sigma + 1e-8)
             
             torch.cuda.synchronize()
             fe_time = start.elapsed_time(end)  # [ms]
@@ -274,7 +282,7 @@ def main(params, args):
             loss = loss.item()
             loss_meter.step(loss)
 
-            log_step = epoch * ipe + step
+            log_step = (epoch - 1) * ipe + step
             if step % params['logging']['log_step_freq'] == 0:
                 logger.info(f"Epoch [{epoch}/{num_epochs}] Step [{step}/{ipe}] Loss: {loss_meter.val:.4f} ({loss_meter.avg:.4f}) "
                             f"FE Time: {fe_time_meter.val:.4f}ms ({fe_time_meter.avg:.4f}ms) "
@@ -343,10 +351,11 @@ def main(params, args):
                 distributed=args.distributed,
                 eval_params=eval_params
             )
+            mad = eval_results['average']['mad']
             
             # -- log eval results
             if is_main():
-                log_step = epoch * ipe
+                log_step = (epoch - 1) * ipe + step
                 if use_csv:
                     eval_log_dict = {'epoch': epoch}
                     eval_log_dict.update(eval_results)
@@ -357,6 +366,19 @@ def main(params, args):
                 
                 if use_wandb:
                     wandb_logger.log_metrics(eval_results, step=log_step)
+                    
+                if mad > best_mad:
+                    best_mad = mad
+                    save_checkpoint(
+                        save_path=os.path.join(ckpt_logdir, f'ckpt_best.pth'),
+                        epoch=epoch,
+                        model=vf,
+                        opt=optimizer,
+                        scaler=scaler,
+                        lr_scheduler=lr_scheduler,
+                        wd_scheduler=wd_scheduler,
+                    )
+                    logger.info(f"New best model saved at epoch {epoch} with MAD: {best_mad:.4f}")
         
         # -- save checkpoint
         if epoch % params['logging']['ckpt']['ckpt_epoch_freq'] == 0 and is_main():
