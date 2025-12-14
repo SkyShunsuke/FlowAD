@@ -13,7 +13,7 @@ from torch.cuda import Event as CUDAEvent
 
 from src.models import init_model
 from src.datasets import build_dataset
-from src.backbones import get_backbone, get_backbone_feature_shape
+from src.backbones import get_backbone, get_backbone_feature_shape, get_normalization_func
 from src.flow_matching import VelocityField
 from src.utils.distributed import init_distributed_mode, get_rank, get_world_size
 from src.utils.distributed import is_main_process as is_main
@@ -147,16 +147,36 @@ def main(params, args):
     # build model
     feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
     fe = get_backbone(**params['model']['backbone'])
+    feat_norm_method = params['model']['backbone'].get('normalization', None)
+    norm_fn = get_normalization_func(feat_norm_method)
     fe.to(device).eval()
     logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized.")
 
     logger.info(f"Using input shape {feat_sz} for the flow matching.")
+    pred_type, loss_type = params['flow_matching'].get('pred_type', 'velocity'), params['flow_matching'].get('loss_type', 'velocity')
+    train_steps = params['flow_matching'].get('train_steps', -1)
+    t_scheduler_train = params['flow_matching']['scheduler'].get('t_scheduler_train', 'linear')
+    t_scheduler_infer = params['flow_matching']['scheduler'].get('t_scheduler_infer', 'linear')
+    t_mu = params['flow_matching']['scheduler'].get('t_mu', 0.0)
+    t_sigma = params['flow_matching']['scheduler'].get('t_sigma', 1.0)
+    div_eps = params['flow_matching'].get('div_eps', 0.05)
+    logger.info(f"Flow Matching Settings: t_scheduler_train: {t_scheduler_train}, t_scheduler_infer: {t_scheduler_infer}, t_mu: {t_mu}, t_sigma: {t_sigma}, div_eps: {div_eps}")
+    logger.info(f"Flow Matching Prediction Type: {pred_type}, Loss Type: {loss_type}")
+    logger.info(f"Using partial time sampling with {train_steps} training steps." if train_steps > 0 else "Using full time sampling.")
     model = init_model(input_sz=feat_sz, num_classes=num_classes, **params['model']).to(device)
     vf = VelocityField(
         model=model,
         input_sz=feat_sz,
         scheduler_name=params['flow_matching']['scheduler']['name'],
         solver_name=params['flow_matching']['solver']['name'],
+        loss_type=loss_type,
+        pred_type=pred_type,
+        train_steps=train_steps,
+        t_scheduler_train=t_scheduler_train,
+        t_scheduler_infer=t_scheduler_infer,
+        t_mu=t_mu,
+        t_sigma=t_sigma,
+        div_eps=div_eps,
         scheduler_params=params['flow_matching']['scheduler'].get('params', None),
         solver_params=params['flow_matching']['solver'].get('params', None),
     )
@@ -245,10 +265,8 @@ def main(params, args):
                 z1, _ = fe(imgs)  # (B, c, h, w)
             end.record()
             
-            # whitten
-            z1_mu = z1.mean(dim=(1,2,3), keepdim=True)
-            z1_sigma = z1.std(dim=(1,2,3), keepdim=True)
-            z1 = (z1 - z1_mu) / (z1_sigma + 1e-8)
+            # feature normalization
+            z1 = norm_fn(z1)
             
             torch.cuda.synchronize()
             fe_time = start.elapsed_time(end)  # [ms]
@@ -343,6 +361,7 @@ def main(params, args):
             eval_results = eval(
                 vf=vf,
                 fe=fe,
+                norm_fn=norm_fn,
                 dataloader=test_loader,
                 device=device,
                 img_sz=(params['data']['img_size'], params['data']['img_size']),

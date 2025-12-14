@@ -3,8 +3,8 @@
 
 GPU_NUM=1  # REPLACE with the number of GPUs you want to use
 ADDR=localhost # REPLACE with the master node address if using multiple nodes
-PORT=12345  # REPLACE with an available port number
-CONFIG_FILE=./configs/eval/ad_dit_px.yaml  # REPLACE with your config file path
+PORT=12350  # REPLACE with an available port number
+CONFIG_FILE=./configs/train/ad_dit_c3.yaml  # REPLACE with your config file path
 
 torchrun \
     --nnodes=1 \
@@ -12,4 +12,4 @@ torchrun \
     --node_rank=0 \
     --master_addr=$ADDR \
     --master_port=$PORT \
-    main.py --config_file $CONFIG_FILE --task eval
+    main.py --config_file $CONFIG_FILE --task train

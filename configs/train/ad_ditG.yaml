@@ -36,6 +36,8 @@ flow_matching:
     name: affine_prob
   solver:
     name: euler
+  pred_type: data # [data, noise, velocity]
+  loss_type: velocity. # [data, noise, velocity]
 model:
   backbone: 
     model_name: efficientnet-b4
@@ -50,6 +52,7 @@ model:
       - 4
       - 8
       - 16
+    normalization: null
   model_name: dit
   patch_size: 1
   cond_channels: 768

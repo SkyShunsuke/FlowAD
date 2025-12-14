@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 def evaluate_inv(
     vf: VelocityField, 
     fe: torch.nn.Module,
+    norm_fn: callable,
     dataloader: torch.utils.data.DataLoader,
     device: torch.device, 
     img_sz: tuple,
@@ -32,6 +33,8 @@ def evaluate_inv(
     """Evaluate on the given dataset with inversion, returning AD metrics.
     Args:
         vf: VelocityField model for evaluation.
+        fe: Feature extractor model.
+        norm_fn: Normalization function for features.
         dataloader: DataLoader providing the evaluation dataset.
         device: Device to perform evaluation on.
         img_sz: Size of the input images (H, W).
@@ -78,10 +81,7 @@ def evaluate_inv(
         
         # -- extract features
         z1, _ = extract_features(fe, imgs, device)  # (B, c, h, w)
-        # whitten
-        z1_mu = z1.mean(dim=(1,2,3), keepdim=True)
-        z1_sigma = z1.std(dim=(1,2,3), keepdim=True)
-        z1 = (z1 - z1_mu) / (z1_sigma + 1e-8)
+        z1 = norm_fn(z1)
         
         # -- inversion through the velocity field
         if use_bfloat16:
@@ -130,6 +130,8 @@ def evaluate_inv(
     img_gts_by_class = divide_by_class(img_gts, clslabels_all)
     px_scores_by_class = divide_by_class(px_scores, clslabels_all)
     px_gts_by_class = divide_by_class(px_gts, clslabels_all)
+    
+    import pdb; pdb.set_trace()
     
     # -- compute image-level metrics
     logger.info("Calculating image-level metrics...")

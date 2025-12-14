@@ -90,7 +90,7 @@ def calculate_img_metrics(
             results_dict['img_aupr'] = aupr
         if 'img_ap' in metrics:
             results_dict['img_ap'] = aupr
-    if 'img_f1' in metrics:
+    if 'img_f1max' in metrics:
         scores_tensor = torch.from_numpy(pred_scores).to(torch.float32).cuda()
         labels_tensor = torch.from_numpy(gt_labels).to(torch.float32).cuda()
         f1, _ = f1_max_gpu_hist(scores_tensor, labels_tensor)

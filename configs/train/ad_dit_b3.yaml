@@ -36,9 +36,8 @@ flow_matching:
     name: affine_prob
   solver:
     name: euler
-  pred_type: velocity # [data, noise, velocity]
+  pred_type: noise # [data, noise, velocity]
   loss_type: velocity # [data, noise, velocity]
-  train_steps: 3
 model:
   backbone: 
     model_name: efficientnet-b4
@@ -68,7 +67,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_sc_dit_enet_121414/
+  log_dir: logs/ad_sc_dit_enet_121412_b3/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -81,7 +80,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_sc_dit_enet_121414
+    run_name: ad_sc_dit_enet_121412_b3
   eval:
     eval_epoch_freq: 25
     steps: 3

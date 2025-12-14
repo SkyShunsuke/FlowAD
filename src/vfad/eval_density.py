@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 def evaluate_density(
     vf: VelocityField, 
     fe: torch.nn.Module,
+    norm_fn: callable,
     dataloader: torch.utils.data.DataLoader,
     device: torch.device, 
     img_sz: tuple,
@@ -85,6 +86,7 @@ def evaluate_density(
         
         # -- extract features
         z1, _ = extract_features(fe, imgs, device)  # (B, c, h, w)
+        z1 = norm_fn(z1)
         
         # -- inversion through the velocity field
         if use_bfloat16:
@@ -174,7 +176,7 @@ def evaluate_density(
             if met_name not in eval_results['average']:
                 eval_results['average'][met_name] = 0.0
             eval_results['average'][met_name] += eval_results[cls_name][met_name]
-    num_classes = len(eval_results) - 1
+    num_classes = len(dataloader.dataset.datasets)
     for met_name in eval_results['average'].keys():
         eval_results['average'][met_name] /= num_classes
 

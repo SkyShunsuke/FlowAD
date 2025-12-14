@@ -28,7 +28,7 @@ import logging
 
 from src.models import init_model
 from src.datasets import build_dataset
-from src.backbones import get_backbone, get_backbone_feature_shape
+from src.backbones import get_backbone, get_backbone_feature_shape, get_normalization_func
 from src.flow_matching import VelocityField
 from src.utils.distributed import init_distributed_mode, get_rank, get_world_size
 from src.utils.distributed import is_main_process as is_main
@@ -81,10 +81,7 @@ def main(params, args):
     test_bs = params['data'].get('test_batch_size', 8)
     test_dataset = build_dataset(train=False, **params['data'])
     
-    if isinstance(test_dataset, torch.utils.data.ConcatDataset):
-        num_classes = len(test_dataset.datasets)
-    else:
-        num_classes = 1
+    num_classes = len(test_dataset.datasets)
     logger.info(f"Number of classes: {num_classes}")
     
     test_sampler = torch.utils.data.distributed.DistributedSampler(
@@ -108,6 +105,8 @@ def main(params, args):
     # build model
     feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
     fe = get_backbone(**params['model']['backbone'])
+    feat_norm_method = params['model']['backbone'].get('normalization', None)
+    norm_fn = get_normalization_func(feat_norm_method)
     fe.to(device).eval()
     logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized.")
 
@@ -158,6 +157,7 @@ def main(params, args):
     eval_results = eval_func(
         vf=vf,
         fe=fe,
+        norm_fn=norm_fn,
         dataloader=test_loader,
         device=device,
         img_sz=(params['data']['img_size'], params['data']['img_size']),

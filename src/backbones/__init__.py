@@ -60,6 +60,30 @@ class DINO2Wrapper(nn.Module):
             out_features.append(state)
         out = torch.cat(out_features, dim=1)
         return out, out_features
+    
+def get_normalization_func(normalization_method=None):
+    if normalization_method is None:
+        return nn.Identity()
+    elif normalization_method == "instance":
+        def norm_fn(x):
+            x_mu = x.mean(dim=(1,2,3), keepdim=True)
+            x_sigma = x.std(dim=(1,2,3), keepdim=True)
+            return (x - x_mu) / (x_sigma + 1e-8)
+        return norm_fn
+    elif normalization_method == "batch":
+        def norm_fn(x):
+            x_mu = x.mean(dim=(0,2,3), keepdim=True)
+            x_sigma = x.std(dim=(0,2,3), keepdim=True)
+            return (x - x_mu) / (x_sigma + 1e-8)
+        return norm_fn
+    elif normalization_method == "layer":
+        def norm_fn(x):
+            x_mu = x.mean(dim=(1,2,3), keepdim=True)
+            x_sigma = x.std(dim=(1,2,3), keepdim=True)
+            return (x - x_mu) / (x_sigma + 1e-8)
+        return norm_fn
+    else:
+        raise ValueError(f"Unsupported normalization method: {normalization_method}")
         
 def get_backbone_feature_shape(model_name):
     if model_name == "efficientnet-b4":
@@ -80,6 +104,10 @@ def get_backbone_feature_shape(model_name):
         return (384, 16, 16)
     elif model_name == "pdn_medium":
         return (384, 16, 16)
+    elif model_name == "vgg19":
+        return (960, 8, 8)
+    elif model_name == "pixel":
+        return (3, 256, 256)
     else:
         raise ValueError(f"Unsupported model type: {model_name}")
 
@@ -199,8 +227,17 @@ def get_backbone(**kwargs):
         return net
     elif 'vgg' in model_name:
         return BackboneModel(model_name, [3, 8, 17, 26])
+    elif 'pixel' in model_name:
+        return Identity()
     else:
         raise ValueError(f"Invalid backbone model: {model_name}")
+
+class Identity(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super(Identity, self).__init__()
+    
+    def forward(self, x, *args, **kwargs):
+        return x, [x]
 
 def get_intermediate_output_hook(layer, input, output):
     BackboneModel.intermediate_cache.append(output)

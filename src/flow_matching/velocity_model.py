@@ -10,6 +10,9 @@ from src.flow_matching.solver import Solver, ODESolver
 import logging
 logger = logging.getLogger(__name__)
 
+PRED_TYPES = ['data', 'noise', 'velocity']
+LOSS_TYPES = ['data', 'noise', 'velocity']
+
 def spatial_gaussian_log_density(x: torch.Tensor) -> torch.Tensor:
     # x: (B, C, H, W)
     return Normal(torch.zeros_like(x), torch.ones_like(x)).log_prob(x).sum(dim=1)
@@ -43,9 +46,62 @@ def build_solver(model: nn.Module, solver_name: str, solver_params: dict) -> Sol
     """
     return ODESolver(model, **solver_params)
 
+def logit_t(bs: int, device: torch.device, mu=0., sigma=1.) -> torch.Tensor:
+    # -- sample t from gaussian
+    t = torch.randn(bs, device=device) * sigma + mu
+    # -- apply sigmoid
+    t = torch.sigmoid(t)
+    return t
+    
+class WrappedModel(nn.Module):
+    """A wrapper for the velocity model to handle additional conditioning information."""
+    def __init__(self, model: nn.Module, pred_type: str, eps=1e-5):
+        super(WrappedModel, self).__init__()
+        self.model = model
+        self.pred_type = pred_type
+        self.eps = eps
+        
+    def forward(self, x: torch.Tensor, t: torch.Tensor, y=None, **extras) -> torch.Tensor:
+        if self.pred_type == 'data':
+            out = self.data_to_velocity(x, t, self.model(x, t, y=y, **extras))
+        elif self.pred_type == 'noise':
+            out = self.noise_to_velocity(x, t, self.model(x, t, y=y, **extras))
+        else:  # velocity
+            out = self.model(x, t, y=y, **extras)
+        return out
+
+    def noise_to_velocity(self, x_t: torch.Tensor, t: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+        """Convert noise prediction to velocity field.
+        Args:
+            x_t (torch.Tensor): The intermediate points along the path.
+            t (torch.Tensor): The time steps.
+            out (torch.Tensor): The noise prediction from the model.
+        Returns:
+            torch.Tensor: The velocity field at x_t.
+        """
+        div = t.expand_as(x_t)
+        div = torch.clamp(div, min=self.eps)
+        v_t = (x_t - out) / div
+        return v_t
+    
+    def data_to_velocity(self, x_t: torch.Tensor, t: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+        """Convert data prediction to velocity field.
+        Args:
+            x_t (torch.Tensor): The intermediate points along the path.
+            t (torch.Tensor): The time steps.
+            out (torch.Tensor): The data prediction from the model.
+        Returns:
+            torch.Tensor: The velocity field at x_t.
+        """
+        div = torch.clamp(1-t, min=self.eps)
+        div = div.expand_as(x_t)
+        v_t = (out - x_t) / div
+        return v_t
+
 class VelocityField(nn.Module):
     def __init__(self, model: nn.Module, input_sz: tuple, scheduler_name: str,  solver_name: str, \
-        scheduler_params: dict=None, solver_params: dict = None
+        pred_type:str='velocity', loss_type:str='velocity', loss_fn:str='mse', train_steps: int = -1, 
+        t_scheduler_train: str = 'linear', t_scheduler_infer: str = 'linear', t_mu: float=0.0, t_sigma: float=1.0, div_eps: float=0.05, scheduler_params: dict=None, solver_params: dict = None
     ):
         """Velocity field module for flow matching.
         Args:
@@ -53,6 +109,14 @@ class VelocityField(nn.Module):
             input_sz (tuple): The size of the input data.
             scheduler_name (str): The name of the scheduler to use.
             solver_name (str): The name of the solver to use.
+            pred_type (str, optional): Type of prediction ('data', 'noise', 'velocity'). Defaults to 'velocity'.
+            loss_type (str, optional): Type of loss ('data', 'noise', 'velocity'). Defaults to 'velocity'.
+            train_steps (int, optional): Number of training steps. Defaults to -1.
+            t_scheduler_train (str, optional): Name of the t scheduler for training. Defaults to 'linear'.
+            t_scheduler_infer (str, optional): Name of the t scheduler for inference. Defaults to 'linear'.
+            t_mu (float, optional): Mean of the Gaussian distribution for sampling t. Defaults to 0.0.
+            t_sigma (float, optional): Standard deviation of the Gaussian distribution for sampling t. Defaults to 1.0.
+            div_eps (float, optional): Epsilon value for numerical stability in velocity calculation. Defaults to 0.05.
             scheduler_params (dict, optional): Additional parameters for the scheduler. Defaults to None.
             solver_params (dict, optional): Additional parameters for the solver. Defaults to None.
         Usage: 
@@ -71,12 +135,68 @@ class VelocityField(nn.Module):
             - The model takes input of shape (batch_size, *input_sz) and returns output of the same shape.
             - The scheduler and solver are implemented elsewhere and are compatible with this module.
         """
+        assert pred_type in PRED_TYPES, f"pred_type must be one of {PRED_TYPES}"
+        assert loss_type in LOSS_TYPES, f"loss_type must be one of {LOSS_TYPES}"
         super(VelocityField, self).__init__()
 
         self.model = model
         self.input_sz = input_sz
+        self.pred_type = pred_type
+        self.loss_type = loss_type
+        self.loss_fn = loss_fn
+        self.div_eps = div_eps
+        self.t_scheduler_train = t_scheduler_train
+        self.t_scheduler_infer = t_scheduler_infer
+        self.t_mu = t_mu
+        self.t_sigma = t_sigma
+        self.train_steps = train_steps  
         self.path = build_scheduler(scheduler_name, scheduler_params or {})
         self.solver = build_solver(model, solver_name, solver_params or {})
+        
+    def compute_loss(self, x0, x1, path_sample, y=None):
+        """Compute the flow matching loss based on the specified loss type.
+        """
+        # Get the model prediction
+        xt = path_sample.x_t
+        t = path_sample.t
+        v = path_sample.dx_t
+        out = self.model(xt, t, y=y)
+        
+        t = t.view(-1, 1, 1, 1)
+        if self.loss_type == 'velocity':
+            target = v
+            if self.pred_type == 'velocity':
+                pred = out
+            elif self.pred_type == 'data':
+                div = torch.clamp(1-t, min=self.div_eps)
+                pred = (out - xt) / div
+            elif self.pred_type == 'noise':
+                pred = (xt - out) / t
+        elif self.loss_type == 'data':
+            target = x0
+            if self.pred_type == 'velocity':
+                pred = (1- t) * out + xt
+            elif self.pred_type == 'data':
+                pred = out
+            elif self.pred_type == 'noise':
+                pred = (xt - (1 - t) * out) / t
+        elif self.loss_type == 'noise':
+            target = x1
+            if self.pred_type == 'velocity':
+                pred = xt - t * out
+            elif self.pred_type == 'data':
+                pred = (xt - t * out) / (1 - t)
+            elif self.pred_type == 'noise':
+                pred = out
+        else:
+            raise NotImplementedError(f"Loss type {self.loss_type} not implemented.")
+        
+        # - compute loss
+        if self.loss_fn == 'mse':
+            loss = torch.pow(pred - target, 2).mean()
+        else:
+            raise NotImplementedError(f"Loss function {self.loss_fn} not implemented.")
+        return loss
         
     def forward(self, x1, y=None):
         """Compute the loss for flow matching.
@@ -92,14 +212,23 @@ class VelocityField(nn.Module):
         
         # - sample timesteps and initial points
         x0 = torch.randn_like(x1).to(device)
-        t = torch.rand(bs).to(device)
+        if self.t_scheduler_train == 'linear':
+            cand_t = torch.linspace(0., 1., self.train_steps)
+        elif self.t_scheduler_train == 'logistic':
+            cand_t = logit_t(bs, device, self.t_mu, self.t_sigma)
+        else:
+            raise NotImplementedError(f"t_scheduler_name {self.t_scheduler_train} not implemented.")
+        
+        if self.train_steps > 0:
+            t = cand_t[torch.randint(0, self.train_steps, (bs,))].to(device)
+        else:
+            t = cand_t.to(device)
         
         # - sample intermediate points along the path
         path_sample = self.path.sample(t=t, x_0=x0, x_1=x1)
         
         # - flow matching loss (l2)
-        u_t = self.model(path_sample.x_t, path_sample.t, y=y)
-        loss = torch.pow(u_t - path_sample.dx_t, 2).mean()
+        loss = self.compute_loss(x0, x1, path_sample, y=y)
         return loss
     
     def sample(self, x0, y, steps: int, return_intermediate: bool=False, solver_name: str='euler', solver_params: dict=None, start_t: float=0.0):
@@ -120,7 +249,8 @@ class VelocityField(nn.Module):
             x1_inter = vf.sample(x0, y, steps=10, return_intermediate=True)  # List of intermediate results
         """
         # - build solver
-        solver = build_solver(self.model, solver_name, solver_params or {})
+        model = WrappedModel(self.model, self.pred_type, self.div_eps)
+        solver = build_solver(model, solver_name, solver_params or {})
 
         # - define timesteps
         timesteps = torch.linspace(start_t, 1., steps).to(x0.device)
@@ -161,10 +291,11 @@ class VelocityField(nn.Module):
             x0 = vf.invert(x1, y, steps=10)  # (batch_size, *input_sz)
         """
         # - build solver
-        solver = build_solver(self.model, solver_name, solver_params or {})
+        model = WrappedModel(self.model, self.pred_type, self.div_eps)
+        solver = build_solver(model, solver_name, solver_params or {})
 
         # - define timesteps
-        timesteps = torch.tensor([1.0, stop_time]).to(x1.device)
+        timesteps = torch.tensor([1., stop_time]).to(x1.device)
         step_size = 1.0 / steps
         
         # - invert with solver
@@ -199,9 +330,9 @@ class VelocityField(nn.Module):
         Usage: 
             log_prob = vf.log_prob(x1, y, steps=10)  # (batch_size,)
         """
-        device = x1.device
         # -- build solver
-        solver = build_solver(self.model, solver_name, solver_params or {})
+        model = WrappedModel(self.model, self.pred_type, self.div_eps)
+        solver = build_solver(model, solver_name, solver_params or {})
         
         # -- define prior log-probability
         gaussian_log_density = spatial_gaussian_log_density

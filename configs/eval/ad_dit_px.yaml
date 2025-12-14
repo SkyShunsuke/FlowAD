@@ -1,10 +1,10 @@
 meta: 
   name: vfad
   global_seed: 0
-  use_bfloat16: False
+  use_bfloat16: True
 data:
   data_root: data/mvtec_ad
-  dataset_name: mvtec_ad
+  dataset_name: mvtec_ad 
   category: screw
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
@@ -15,28 +15,24 @@ data:
 flow_matching:
   scheduler: 
     name: affine_prob
+    t_scheduler_train: logistic
+    t_scheduler_infer: linear
+    t_mu: -0.8
+    t_sigma: 0.8
   solver:
     name: euler
+  pred_type: noise # [data, noise, velocity]
+  loss_type: velocity # [data, noise, velocity]
+  train_steps: -1
 model:
   backbone: 
-    model_name: efficientnet-b4
-    pretrained: true
-    outblocks:
-      - 1
-      - 5
-      - 9
-      - 21
-    outstrides: 
-      - 2
-      - 4
-      - 8
-      - 16
+    model_name: pixel
     normalization: null
   model_name: dit
-  patch_size: 1
+  patch_size: 16
   cond_channels: 768
-  hidden_size: 2048
-  depth: 16
+  hidden_size: 768
+  depth: 12
   num_heads: 8
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
@@ -44,20 +40,20 @@ model:
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_sc_ditG_enet_121314/checkpoints/ckpt_best.pth
+  resume_path: ./logs/ad_sc_dit_enet_121418_px/checkpoints/ckpt_best.pth
 logging:
-  log_dir: logs/ad_sc_ditG_enet_121314/
+  log_dir: logs/ad_sc_dit_enet_121418_px/
   eval:
-    eval_strategy: inversion  # options: 'density', 'recon', 'inversion'
+    eval_strategy: inversion
     exact_divergence: False
     steps: 3
     # for density estimation if eval_strategy is 'density'
     hutchinson_samples: 10
-    hutchinson_batch_size: 1
+    hutchinson_batch_size: 10
     # for reconstruction if eval_strategy is 'recon'
-    inv_steps: 20
-    recon_steps: 20  # for reconstruction, we use inv/recon steps instead of 'steps'
-    inv_stop_time: 0.5
+    inv_steps: 100
+    recon_steps: 100  # for reconstruction, we use inv/recon steps instead of 'steps'
+    inv_stop_time: 0.4
     solver_name: euler
     img_score_agg: diff+sum
     metrics: 
