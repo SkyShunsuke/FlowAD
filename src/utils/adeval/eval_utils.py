@@ -104,7 +104,7 @@ def calculate_px_metrics(
     metrics: list,
     device: torch.device = torch.device('cuda'),
     distributed: bool = False,
-    accum_size: int = 10000,
+    accum_size: int = 100,
     eps: float = 1e-8,
 ):
     """Calculate pixel-level anomaly detection metrics.
@@ -121,15 +121,14 @@ def calculate_px_metrics(
     score_min, score_max = pred_scores_flat.min() - eps, pred_scores_flat.max() + eps
 
     # -- use adeval for AUROC and AUPRO, AUPR
-    nb = len(gt_masks_flat) // accum_size + (1 if len(gt_masks_flat) % accum_size != 0 else 0)
+    nb = len(gt_masks) // accum_size + (1 if len(gt_masks) % accum_size != 0 else 0)
     evaluator = EvalAccumulatorCuda(score_min, score_max, score_min, score_max)
     for i in range(0, nb):
         start_idx = i * accum_size
-        end_idx = min((i + 1) * accum_size, len(gt_masks_flat))
-        evaluator.add_anomap_batch(
-            torch.from_numpy(pred_scores[start_idx:end_idx]).to(device),
-            torch.from_numpy(gt_masks[start_idx:end_idx]).to(device)
-        )
+        end_idx = min((i + 1) * accum_size, len(gt_masks))
+        gt_batch = torch.from_numpy((gt_masks[start_idx:end_idx] > 0).astype(np.uint8)).to(device)
+        score_batch = torch.from_numpy(pred_scores[start_idx:end_idx]).to(device)
+        evaluator.add_anomap_batch(score_batch, gt_batch)
     results = evaluator.summary()
     if 'px_auroc' in metrics:
         results_dict['px_auroc'] = results['p_auroc']
@@ -140,12 +139,13 @@ def calculate_px_metrics(
     
     # -- use skleran for AP
     if 'px_ap' in metrics:
-        gt_bin = (gt_masks_flat == 255).astype(int)
+        gt_bin = (gt_masks_flat > 0).astype(int)
         ap = average_precision_score(gt_bin, pred_scores_flat)
         results_dict['px_ap'] = ap
         
     # -- use f1_max_gpu_hist for F1-max
     if 'px_f1max' in metrics:
+        gt_masks_flat = (gt_masks_flat > 0).astype(float)
         scores_tensor = torch.from_numpy(pred_scores_flat).to(torch.float32).to(device)
         labels_tensor = torch.from_numpy(gt_masks_flat).to(torch.float32).to(device)
         f1, _ = f1_max_gpu_hist(scores_tensor, labels_tensor, distributed=distributed)

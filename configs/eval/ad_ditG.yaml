@@ -4,8 +4,8 @@ meta:
   use_bfloat16: False
 data:
   data_root: data/mvtec_ad
-  dataset_name: mvtec_ad
-  category: screw
+  dataset_name: mvtec_ad_all
+  category: all
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
@@ -15,8 +15,15 @@ data:
 flow_matching:
   scheduler: 
     name: affine_prob
+    t_scheduler_train: linear
+    t_scheduler_infer: linear
+    t_mu: -0.8
+    t_sigma: 0.8
   solver:
     name: euler
+  pred_type: velocity # [data, noise, velocity]
+  loss_type: velocity # [data, noise, velocity]
+  train_steps: -1
 model:
   backbone: 
     model_name: efficientnet-b4
@@ -44,13 +51,13 @@ model:
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_sc_ditG_enet_121314/checkpoints/ckpt_best.pth
+  resume_path: ./logs/ad_mc_ditG_enet_121301/checkpoints/ckpt_best.pth
 logging:
-  log_dir: logs/ad_sc_ditG_enet_121314/
+  log_dir: logs/ad_mc_ditG_enet_121301/
   eval:
     eval_strategy: inversion  # options: 'density', 'recon', 'inversion'
     exact_divergence: False
-    steps: 3
+    steps: 10
     # for density estimation if eval_strategy is 'density'
     hutchinson_samples: 10
     hutchinson_batch_size: 1

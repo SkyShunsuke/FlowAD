@@ -5,7 +5,7 @@ meta:
 data:
   data_root: data/mvtec_ad
   dataset_name: mvtec_ad 
-  category: screw
+  category: metal_nut
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
@@ -15,13 +15,13 @@ data:
 flow_matching:
   scheduler: 
     name: affine_prob
-    t_scheduler_train: logistic
+    t_scheduler_train: linear
     t_scheduler_infer: linear
     t_mu: -0.8
     t_sigma: 0.8
   solver:
     name: euler
-  pred_type: noise # [data, noise, velocity]
+  pred_type: data # [data, noise, velocity]
   loss_type: velocity # [data, noise, velocity]
   train_steps: -1
 model:
@@ -40,9 +40,9 @@ model:
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_sc_dit_enet_121418_px/checkpoints/ckpt_best.pth
+  resume_path: ./logs/ad_sc_dit_enet_121612_px/checkpoints/ckpt_best.pth
 logging:
-  log_dir: logs/ad_sc_dit_enet_121418_px/
+  log_dir: logs/ad_sc_dit_enet_121612_px/
   eval:
     eval_strategy: inversion
     exact_divergence: False
@@ -64,6 +64,8 @@ logging:
       - px_ap
       - px_f1max
       - px_aupro
+    save_dir: ./vis/ad_dit_px/  # Directory to save anomaly maps
+    save_anomaps: True  # Whether to save anomaly maps
 
     
 

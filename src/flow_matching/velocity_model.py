@@ -55,7 +55,7 @@ def logit_t(bs: int, device: torch.device, mu=0., sigma=1.) -> torch.Tensor:
     
 class WrappedModel(nn.Module):
     """A wrapper for the velocity model to handle additional conditioning information."""
-    def __init__(self, model: nn.Module, pred_type: str, eps=1e-5):
+    def __init__(self, model: nn.Module, pred_type: str, eps=0.05):
         super(WrappedModel, self).__init__()
         self.model = model
         self.pred_type = pred_type
@@ -163,29 +163,30 @@ class VelocityField(nn.Module):
         out = self.model(xt, t, y=y)
         
         t = t.view(-1, 1, 1, 1)
+        recip_one_minus_t = 1.0 / torch.clamp(1 - t, min=self.div_eps)
+        recip_t = 1.0 / torch.clamp(t, min=self.div_eps)
         if self.loss_type == 'velocity':
             target = v
             if self.pred_type == 'velocity':
                 pred = out
             elif self.pred_type == 'data':
-                div = torch.clamp(1-t, min=self.div_eps)
-                pred = (out - xt) / div
+                pred = (out - xt) * recip_one_minus_t
             elif self.pred_type == 'noise':
-                pred = (xt - out) / t
+                pred = (xt - out) * recip_t
         elif self.loss_type == 'data':
-            target = x0
+            target = x1
             if self.pred_type == 'velocity':
                 pred = (1- t) * out + xt
             elif self.pred_type == 'data':
                 pred = out
             elif self.pred_type == 'noise':
-                pred = (xt - (1 - t) * out) / t
+                pred = (xt - (1 - t) * out) * recip_t
         elif self.loss_type == 'noise':
-            target = x1
+            target = x0
             if self.pred_type == 'velocity':
                 pred = xt - t * out
             elif self.pred_type == 'data':
-                pred = (xt - t * out) / (1 - t)
+                pred = (xt - t * out) * recip_one_minus_t
             elif self.pred_type == 'noise':
                 pred = out
         else:
@@ -213,7 +214,7 @@ class VelocityField(nn.Module):
         # - sample timesteps and initial points
         x0 = torch.randn_like(x1).to(device)
         if self.t_scheduler_train == 'linear':
-            cand_t = torch.linspace(0., 1., self.train_steps)
+            cand_t = torch.rand(bs, device=device) if self.train_steps < 0 else torch.linspace(0., 1., self.train_steps).to(device)
         elif self.t_scheduler_train == 'logistic':
             cand_t = logit_t(bs, device, self.t_mu, self.t_sigma)
         else:
@@ -306,7 +307,7 @@ class VelocityField(nn.Module):
             step_size=step_size,
             return_intermediate=True,
             y=y,
-        )  
+        )
         if return_intermediate:
             return samples  # List of intermediate results
         else:

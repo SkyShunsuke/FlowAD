@@ -1,6 +1,7 @@
 data
-wandb
-logs
+wandb/
+logs/
+vis/
 batch_train.sh.*
 
 # Byte-compiled / optimized / DLL files

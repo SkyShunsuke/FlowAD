@@ -111,12 +111,30 @@ def main(params, args):
     logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized.")
 
     logger.info(f"Using input shape {feat_sz} for the flow matching.")
+    pred_type, loss_type = params['flow_matching'].get('pred_type', 'velocity'), params['flow_matching'].get('loss_type', 'velocity')
+    train_steps = params['flow_matching'].get('train_steps', -1)
+    t_scheduler_train = params['flow_matching']['scheduler'].get('t_scheduler_train', 'linear')
+    t_scheduler_infer = params['flow_matching']['scheduler'].get('t_scheduler_infer', 'linear')
+    t_mu = params['flow_matching']['scheduler'].get('t_mu', 0.0)
+    t_sigma = params['flow_matching']['scheduler'].get('t_sigma', 1.0)
+    div_eps = params['flow_matching'].get('div_eps', 0.05)
+    logger.info(f"Flow Matching Settings: t_scheduler_train: {t_scheduler_train}, t_scheduler_infer: {t_scheduler_infer}, t_mu: {t_mu}, t_sigma: {t_sigma}, div_eps: {div_eps}")
+    logger.info(f"Flow Matching Prediction Type: {pred_type}, Loss Type: {loss_type}")
+    logger.info(f"Using partial time sampling with {train_steps} training steps." if train_steps > 0 else "Using full time sampling.")
     model = init_model(input_sz=feat_sz, num_classes=num_classes, **params['model']).to(device)
     vf = VelocityField(
         model=model,
         input_sz=feat_sz,
         scheduler_name=params['flow_matching']['scheduler']['name'],
         solver_name=params['flow_matching']['solver']['name'],
+        loss_type=loss_type,
+        pred_type=pred_type,
+        train_steps=train_steps,
+        t_scheduler_train=t_scheduler_train,
+        t_scheduler_infer=t_scheduler_infer,
+        t_mu=t_mu,
+        t_sigma=t_sigma,
+        div_eps=div_eps,
         scheduler_params=params['flow_matching']['scheduler'].get('params', None),
         solver_params=params['flow_matching']['solver'].get('params', None),
     )
@@ -164,7 +182,9 @@ def main(params, args):
         verbose=True,
         use_bfloat16=params['meta']['use_bfloat16'],
         distributed=args.distributed,
-        eval_params=eval_params
+        save_anomaps=eval_params.get('save_anomaps', False),
+        save_dir=eval_params.get('save_dir', None),
+        eval_params=eval_params,
     )
             
     # -- save results

@@ -1,16 +1,16 @@
 meta: 
   name: vfad
 data:
-  data_root: data/mvtec_ad
-  dataset_name: mvtec_ad
-  category: hazelnut
+  data_root: data/visa
+  dataset_name: visa
+  category: candle
   train_batch_size: 8 # per GPU batch size for training
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
   persistent_workers: False
   img_size: 256
-  transform_type: imagenet
+  transform_type: default
 opt:
   epochs: 300
   name: adamw
@@ -18,10 +18,10 @@ opt:
   clip_grad: 1.0
   wd_start: 0.0000
   wd_end: 0.0000
-  lr_start: 0.00001
-  lr_warmup: 0.0005
-  lr_warmup_epochs: 20
-  lr_end: 0.00005
+  lr_start: 0.000001
+  lr_warmup: 0.00005
+  lr_warmup_epochs: 40
+  lr_end: 0.000005
   fix_lr_thres: -1
   fix_wd_thres: -1
   fix_lr_strategy: const
@@ -40,7 +40,7 @@ flow_matching:
     t_sigma: 0.8
   solver:
     name: euler
-  pred_type: velocity # [data, noise, velocity]
+  pred_type: data # [data, noise, velocity]
   loss_type: velocity # [data, noise, velocity]
   train_steps: -1
 model:
@@ -61,7 +61,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_sc_dit_enet_121613_px/
+  log_dir: logs/visa_dit_enet_121613_px/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -74,7 +74,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_sc_dit_enet_121613_px
+    run_name: visa_dit_enet_121613_px
   eval:
     eval_epoch_freq: 25
     steps: 3
@@ -93,3 +93,4 @@ logging:
     steps: 50
     solver_name: midpoint
     num_samples_per_class: 16
+    denorm_type: default

@@ -357,6 +357,20 @@ class DiT(nn.Module):
         
         x = rearrange(x, 'b (h w) (p1 p2 c) -> b c (h p1) (w p2)', h=h, w=w, p1=p, p2=p, c=C)
         return x
+    
+    def patchify(self, x):
+        """Convert image-like tensor into sequence of tokens.
+        Args:
+            x (Tensor): tensor of shape (B, C, H, W)
+        Returns:
+            Tensor: tensor of shape (B, N, patch_size*patch_size*in_channels)
+        """        
+        p = self.x_embedder.patch_size[0]
+        assert x.shape[2] == x.shape[3] and x.shape[2] % p == 0
+
+        h = w = x.shape[2] // p
+        x = rearrange(x, 'b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1=p, p2=p, h=h, w=w, c=x.shape[1])
+        return x
 
     def forward(self, x, t, y=None, return_tokens=False, **kwargs):
         """Apply model to an input batch.

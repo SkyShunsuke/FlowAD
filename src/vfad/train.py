@@ -22,6 +22,7 @@ from src.utils.opt.optimizer import build_optimizer, save_checkpoint, load_check
 from src.utils.opt.scheduler import get_cosine_wd_scheduler, get_warmup_cosine_lr_scheduler
 from src.utils.opt.scaler import get_gradient_scaler
 from src.vfad.eval import evaluate_inv as eval
+from src.vfad.visualize import generate_samples, save_samples
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger()
@@ -237,6 +238,13 @@ def main(params, args):
     eval_freq = params['logging']['eval']['eval_epoch_freq']
     eval_params = params['logging']['eval']
     save_best = params['logging']['ckpt'].get('save_best', True)
+    
+    # -- visualization setup
+    vis_freq = params['logging'].get('vis', {}).get('vis_epoch_freq', None)
+    vis_steps = params['logging'].get('vis', {}).get('steps', 10)
+    vis_solver_name = params['logging'].get('vis', {}).get('solver_name', 'euler')
+    denorm_type = params['logging'].get('vis', {}).get('denorm_type', 'default')
+    num_samples_per_class = params['logging'].get('vis', {}).get('num_samples_per_class', 10)
 
     logger.info(f"Starting training for {num_epochs} epochs...")
     best_mad = 0.0 if save_best else 1e4
@@ -399,6 +407,30 @@ def main(params, args):
                     )
                     logger.info(f"New best model saved at epoch {epoch} with MAD: {best_mad:.4f}")
         
+        # -- visualization
+        if epoch % vis_freq == 0 and is_main():
+            logger.info(f"Generating visualization samples at epoch {epoch}...")    
+            class_map = train_loader.dataset.datasets[0].labels_to_names
+            samples_by_class, org_imgs_by_class = generate_samples(
+                vf=vf,
+                dataloader=train_loader,
+                device=device,
+                input_sz=feat_sz,
+                steps=vis_steps,
+                solver_name=vis_solver_name,
+                num_samples_per_class=num_samples_per_class,
+                distributed=args.distributed,
+                denorm_type=denorm_type,
+            )
+            save_samples(
+                save_dir=os.path.join(vis_logdir, f'epoch_{epoch}'),
+                samples_by_class=samples_by_class,
+                org_imgs_by_class=org_imgs_by_class,
+                class_map=class_map
+            )
+            logger.info(f"Visualization samples saved at epoch {epoch}.")
+        torch.distributed.barrier()
+            
         # -- save checkpoint
         if epoch % params['logging']['ckpt']['ckpt_epoch_freq'] == 0 and is_main():
             save_checkpoint(

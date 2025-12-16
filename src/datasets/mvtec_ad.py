@@ -53,7 +53,6 @@ class MVTecAD(Dataset):
         self.split = split
         self.custom_transforms = transform
         self.is_mask = is_mask
-        self.cls_label = cls_label
         
         assert Path(self.data_root).exists(), f"Path {self.data_root} does not exist"
         assert self.split == 'train' or self.split == 'test'
