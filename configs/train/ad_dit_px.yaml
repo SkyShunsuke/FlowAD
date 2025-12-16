@@ -9,7 +9,7 @@ data:
   num_workers: 8
   pin_memory: True
   persistent_workers: False
-  img_size: 256
+  img_size: 64
   transform_type: imagenet
 opt:
   epochs: 300
@@ -34,7 +34,7 @@ opt:
 flow_matching:
   scheduler: 
     name: affine_prob
-    t_scheduler_train: logistic
+    t_scheduler_train: linear
     t_scheduler_infer: linear
     t_mu: -0.8
     t_sigma: 0.8
@@ -48,7 +48,7 @@ model:
     model_name: pixel
     normalization: null
   model_name: dit
-  patch_size: 16
+  patch_size: 8
   cond_channels: 768
   hidden_size: 768
   depth: 12
@@ -61,7 +61,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_sc_dit_enet_121613_px/
+  log_dir: logs/ad_sc_dit_enet_121702_px/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -74,7 +74,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_sc_dit_enet_121613_px
+    run_name: ad_sc_dit_enet_121702_px
   eval:
     eval_epoch_freq: 25
     steps: 3
@@ -93,3 +93,4 @@ logging:
     steps: 50
     solver_name: midpoint
     num_samples_per_class: 16
+    denorm_type: imagenet

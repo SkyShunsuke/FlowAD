@@ -2,8 +2,8 @@ meta:
   name: vfad
 data:
   data_root: data/mvtec_ad
-  dataset_name: mvtec_ad
-  category: screw
+  dataset_name: mvtec_ad_all
+  category: all
   train_batch_size: 8 # per GPU batch size for training
   test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
@@ -27,17 +27,22 @@ opt:
   fix_lr_strategy: const
   fix_wd_strategy: const
   all_gather: False
-  use_bfloat16: False
+  use_bfloat16: True
   bias_decay: False
   norm_decay: False
   global_seed: 0
 flow_matching:
   scheduler: 
     name: affine_prob
+    t_scheduler_train: linear
+    t_scheduler_infer: linear
+    t_mu: -0.8
+    t_sigma: 0.8
   solver:
     name: euler
   pred_type: data # [data, noise, velocity]
-  loss_type: velocity. # [data, noise, velocity]
+  loss_type: data # [data, noise, velocity]
+  train_steps: -1
 model:
   backbone: 
     model_name: efficientnet-b4
@@ -67,7 +72,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_sc_ditG_enet_121314/
+  log_dir: logs/ad_mc_ditG_enet_121703/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -80,7 +85,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_sc_ditG_enet_121314
+    run_name: ad_mc_ditG_enet_121703
   eval:
     eval_epoch_freq: 25
     steps: 3
@@ -94,6 +99,12 @@ logging:
       - px_ap
       - px_f1max
       - px_aupro
+  vis:
+    vis_epoch_freq: 500
+    steps: 50
+    solver_name: midpoint
+    num_samples_per_class: 16
+    denorm_type: imagenet
 
     
 

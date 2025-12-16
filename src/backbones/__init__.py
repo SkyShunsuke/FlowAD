@@ -107,7 +107,7 @@ def get_backbone_feature_shape(model_name):
     elif model_name == "vgg19":
         return (960, 8, 8)
     elif model_name == "pixel":
-        return (3, 256, 256)
+        return (3, 64, 64)
     else:
         raise ValueError(f"Unsupported model type: {model_name}")
 
