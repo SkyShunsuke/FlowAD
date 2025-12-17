@@ -34,10 +34,15 @@ opt:
 flow_matching:
   scheduler: 
     name: affine_prob
+    t_scheduler_train: linear
+    t_scheduler_infer: linear
+    t_mu: -0.8
+    t_sigma: 0.8
   solver:
     name: euler
   pred_type: data # [data, noise, velocity]
   loss_type: data # [data, noise, velocity]
+  train_steps: -1
 model:
   backbone: 
     model_name: efficientnet-b4
@@ -52,7 +57,7 @@ model:
       - 4
       - 8
       - 16
-    normalization: instance
+    normalization: null
   model_name: dit
   patch_size: 1
   cond_channels: 768
@@ -67,7 +72,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_sc_dit_enet_121412_a1/
+  log_dir: logs/ad_sc_dit_enet_121704_a1/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -80,7 +85,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_sc_dit_enet_121412_a1
+    run_name: ad_sc_dit_enet_121704_a1
   eval:
     eval_epoch_freq: 25
     steps: 3
@@ -94,3 +99,9 @@ logging:
       - px_ap
       - px_f1max
       - px_aupro
+  vis:
+    vis_epoch_freq: 500
+    steps: 50
+    solver_name: midpoint
+    num_samples_per_class: 16
+    denorm_type: default

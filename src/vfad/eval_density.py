@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 
-from src.utils.distributed import concat_all_gather
+from src.utils.distributed import concat_all_gather, get_world_size, get_rank
 from src.flow_matching import VelocityField
 from src.utils.adeval.eval_utils import (
     calculate_img_metrics,
@@ -13,6 +13,7 @@ from src.utils.adeval.eval_utils import (
     aggregate_px_values,
     SUPPORTED_METRICS
 )
+from src.vfad.visualize import save_anomaly_maps, denormalize_image
 
 import logging
 logger = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ def evaluate_density(
     use_bfloat16: bool = False,
     distributed: bool = False,
     eval_params: dict = None,
+    save_anomaps: bool = False,
+    save_dir: str = None,
 ):
     """Evaluate on the given dataset with density estimation, returning AD metrics.
     Args:
@@ -69,6 +72,7 @@ def evaluate_density(
     clslabels_all = np.zeros((N,), dtype=np.uint8)
     anom_labels_all = np.zeros((N,), dtype=np.uint8)
     nll_all = np.zeros((N, *img_sz), dtype=np.float32)
+    org_imgs_all = np.zeros((N, img_sz[0], img_sz[1], 3), dtype=np.uint8)
     
     if distributed:
         # -- extract the underlying model from DDP
@@ -76,16 +80,16 @@ def evaluate_density(
     
     logger.info("Extracting features and computing anomaly scores...")
     for step, batch in tqdm(enumerate(dataloader), total=len(dataloader), disable=not verbose):
-        current_idx = step * dataloader.batch_size
+        current_idx = step * dataloader.batch_size * get_world_size()
         
         # -- prepare data
-        imgs, clslabels_local = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
-        imgs, clslabels_local = imgs.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True)
+        imgs_local, clslabels_local = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
+        imgs_local, clslabels_local = imgs_local.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True)
         anom_labels_local, anom_masks_local = batch['label'], batch['mask'] # (B,), (B, H, W)
         anom_labels_local, anom_masks_local = anom_labels_local.to(device, non_blocking=True), anom_masks_local.to(device, non_blocking=True)
         
         # -- extract features
-        z1, _ = extract_features(fe, imgs, device)  # (B, c, h, w)
+        z1, _ = extract_features(fe, imgs_local, device)  # (B, c, h, w)
         z1 = norm_fn(z1)
         
         # -- inversion through the velocity field
@@ -101,11 +105,13 @@ def evaluate_density(
             anom_labels = concat_all_gather(anom_labels_local)
             cls_labels = concat_all_gather(clslabels_local)
             anom_masks = concat_all_gather(anom_masks_local)
+            imgs = concat_all_gather(imgs_local)
         else:
             nll = nll_local
             anom_labels = anom_labels_local
             cls_labels = clslabels_local
             anom_masks = anom_masks_local
+            imgs = imgs_local
         
         # -- compute anomaly scores
         nll = F.interpolate(
@@ -119,7 +125,11 @@ def evaluate_density(
         clslabels_all[current_idx: current_idx + bs] = cls_labels.cpu().numpy().astype(np.uint8)
         masks_all[current_idx: current_idx + bs] = anom_masks.cpu().numpy().astype(np.uint8)
         anom_labels_all[current_idx: current_idx + bs] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
-    
+
+        imgs = denormalize_image(imgs) * 255.0
+        imgs = imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)  # (B, H, W, C)
+        org_imgs_all[current_idx: current_idx + bs] = imgs
+        
     # -- compute anomaly scores
     px_scores = nll_all  # (N, H, W)
     img_scores = aggregate_px_values(
@@ -134,6 +144,22 @@ def evaluate_density(
     img_gts_by_class = divide_by_class(img_gts, clslabels_all)
     px_scores_by_class = divide_by_class(px_scores, clslabels_all)
     px_gts_by_class = divide_by_class(px_gts, clslabels_all)
+    org_imgs_by_class = divide_by_class(org_imgs_all, clslabels_all)
+    clsname_map = dataloader.dataset.datasets[0].labels_to_names
+
+    # -- save anomaly maps if required
+    if save_anomaps and save_dir is not None and get_rank() == 0:
+        save_anomaly_maps(
+            save_dir=save_dir,
+            img_scores_by_class=img_scores_by_class,
+            img_gts_by_class=img_gts_by_class,
+            px_scores_by_class=px_scores_by_class,
+            px_gts_by_class=px_gts_by_class,
+            org_img_by_class=org_imgs_by_class,
+            class_map=clsname_map,
+        )
+    if torch.distributed.is_initialized():
+        torch.distributed.barrier()
     
     # -- compute image-level metrics
     logger.info("Calculating image-level metrics...")

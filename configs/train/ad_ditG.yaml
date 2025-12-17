@@ -40,8 +40,8 @@ flow_matching:
     t_sigma: 0.8
   solver:
     name: euler
-  pred_type: data # [data, noise, velocity]
-  loss_type: data # [data, noise, velocity]
+  pred_type: noise # [data, noise, velocity]
+  loss_type: noise # [data, noise, velocity]
   train_steps: -1
 model:
   backbone: 

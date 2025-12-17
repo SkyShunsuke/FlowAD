@@ -55,9 +55,10 @@ def logit_t(bs: int, device: torch.device, mu=0., sigma=1.) -> torch.Tensor:
     
 class WrappedModel(nn.Module):
     """A wrapper for the velocity model to handle additional conditioning information."""
-    def __init__(self, model: nn.Module, pred_type: str, eps=0.05):
+    def __init__(self, model: nn.Module, path, pred_type: str, eps=0.05):
         super(WrappedModel, self).__init__()
         self.model = model
+        self.path = path
         self.pred_type = pred_type
         self.eps = eps
         
@@ -208,6 +209,7 @@ class VelocityField(nn.Module):
         Returns:
             torch.Tensor: The computed loss.
         """
+        
         bs = x1.shape[0]
         device = x1.device
         
@@ -249,8 +251,9 @@ class VelocityField(nn.Module):
             x1 = vf.sample(x0, y, steps=10)  # (batch_size, *input_sz)
             x1_inter = vf.sample(x0, y, steps=10, return_intermediate=True)  # List of intermediate results
         """
+        
         # - build solver
-        model = WrappedModel(self.model, self.pred_type, self.div_eps)
+        model = WrappedModel(self.model, self.path, self.pred_type, self.div_eps)
         solver = build_solver(model, solver_name, solver_params or {})
 
         # - define timesteps
@@ -292,7 +295,7 @@ class VelocityField(nn.Module):
             x0 = vf.invert(x1, y, steps=10)  # (batch_size, *input_sz)
         """
         # - build solver
-        model = WrappedModel(self.model, self.pred_type, self.div_eps)
+        model = WrappedModel(self.model, self.path, self.pred_type, self.div_eps)
         solver = build_solver(model, solver_name, solver_params or {})
 
         # - define timesteps
@@ -332,7 +335,7 @@ class VelocityField(nn.Module):
             log_prob = vf.log_prob(x1, y, steps=10)  # (batch_size,)
         """
         # -- build solver
-        model = WrappedModel(self.model, self.pred_type, self.div_eps)
+        model = WrappedModel(self.model, self.path, self.pred_type, self.div_eps)
         solver = build_solver(model, solver_name, solver_params or {})
         
         # -- define prior log-probability
@@ -343,7 +346,7 @@ class VelocityField(nn.Module):
             hutchinson_step = hutchinson_samples // hutchinson_bs
             
             log_p_acc = 0
-            for i in range(hutchinson_step):
+            for i in tqdm.tqdm(range(hutchinson_step)):
                 Hb = hutchinson_bs
                 B, _, h, w = x1.shape
                 x1_rep = x1.repeat_interleave(Hb, dim=0)

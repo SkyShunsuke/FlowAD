@@ -9,7 +9,7 @@ data:
   num_workers: 8
   pin_memory: True
   persistent_workers: False
-  img_size: 64
+  img_size: 256
   transform_type: imagenet
 opt:
   epochs: 300
@@ -48,7 +48,7 @@ model:
     model_name: pixel
     normalization: null
   model_name: dit
-  patch_size: 8
+  patch_size: 16
   cond_channels: 768
   hidden_size: 768
   depth: 12
@@ -61,22 +61,22 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_sc_dit_enet_121702_px/
+  log_dir: logs/ad_sc_dit_enet_121717_px/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
   log_stdout: True
   ckpt:
     save_latest: False
-    ckpt_epoch_freq: 300
+    ckpt_epoch_freq: 500
     save_best: True
   wandb: 
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_sc_dit_enet_121702_px
+    run_name: ad_sc_dit_enet_121717_px
   eval:
-    eval_epoch_freq: 25
+    eval_epoch_freq: 500
     steps: 3
     solver_name: euler
     img_score_agg: diff+sum

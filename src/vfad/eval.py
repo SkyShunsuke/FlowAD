@@ -3,19 +3,8 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 
-from src.utils.distributed import concat_all_gather
 from src.flow_matching import VelocityField
 
-from sklearn.metrics import roc_auc_score, average_precision_score
-from src.utils.adeval import EvalAccumulatorCuda, f1_max_gpu_hist
-from src.utils.adeval.eval_utils import (
-    calculate_img_metrics,
-    calculate_px_metrics,
-    divide_by_class,
-    extract_features,
-    aggregate_px_values,
-    SUPPORTED_METRICS
-)
 
 import os
 
