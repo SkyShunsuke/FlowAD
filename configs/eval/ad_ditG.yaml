@@ -47,17 +47,17 @@ model:
   num_heads: 8
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
-  use_class_labels: False
+  use_class_labels: True
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_mc_ditG_enet_121301/checkpoints/ckpt_best.pth
+  resume_path: ./logs/ad_mc_ditG_enet_121915/checkpoints/ckpt_best.pth
 logging:
-  log_dir: logs/ad_mc_ditG_enet_121301/
+  log_dir: logs/ad_mc_ditG_enet_121915/
   eval:
-    eval_strategy: density  # options: 'density', 'recon', 'inversion'
+    eval_strategy: inversion  # options: 'density', 'recon', 'inversion'
     exact_divergence: False
-    steps: 5
+    steps: 100
     # for density estimation if eval_strategy is 'density'
     hutchinson_samples: 10
     hutchinson_batch_size: 2

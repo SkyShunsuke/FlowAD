@@ -55,20 +55,31 @@ def logit_t(bs: int, device: torch.device, mu=0., sigma=1.) -> torch.Tensor:
     
 class WrappedModel(nn.Module):
     """A wrapper for the velocity model to handle additional conditioning information."""
-    def __init__(self, model: nn.Module, path, pred_type: str, eps=0.05):
+    def __init__(self, model: nn.Module, path, pred_type: str, cfg_interval=[0.1, 1.0], cfg_scale=1.0, eps=0.05):
         super(WrappedModel, self).__init__()
         self.model = model
         self.path = path
         self.pred_type = pred_type
+        self.cfg_interval = cfg_interval
+        self.cfg_scale = cfg_scale
         self.eps = eps
         
     def forward(self, x: torch.Tensor, t: torch.Tensor, y=None, **extras) -> torch.Tensor:
+        
+        assert self.cfg_scale != 1.0 and y is None, "Classifier-free guidance requires conditioning information y."
+        
+        if self.cfg_scale != 1.0:
+            extras.update({'cfg_scale': self.cfg_scale, 'cfg_interval': self.cfg_interval})
+            model_out = self.model.forward_with_cfg(x, t, y=y, **extras)
+        else:
+            model_out = self.model(x, t, y=y, **extras)
+        
         if self.pred_type == 'data':
-            out = self.data_to_velocity(x, t, self.model(x, t, y=y, **extras))
+            out = self.data_to_velocity(x, t, model_out)
         elif self.pred_type == 'noise':
-            out = self.noise_to_velocity(x, t, self.model(x, t, y=y, **extras))
+            out = self.noise_to_velocity(x, t, model_out)
         else:  # velocity
-            out = self.model(x, t, y=y, **extras)
+            out = model_out
         return out
 
     def noise_to_velocity(self, x_t: torch.Tensor, t: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
@@ -102,7 +113,8 @@ class WrappedModel(nn.Module):
 class VelocityField(nn.Module):
     def __init__(self, model: nn.Module, input_sz: tuple, scheduler_name: str,  solver_name: str, \
         pred_type:str='velocity', loss_type:str='velocity', loss_fn:str='mse', train_steps: int = -1, 
-        t_scheduler_train: str = 'linear', t_scheduler_infer: str = 'linear', t_mu: float=0.0, t_sigma: float=1.0, div_eps: float=0.05, scheduler_params: dict=None, solver_params: dict = None
+        t_scheduler_train: str = 'linear', t_scheduler_infer: str = 'linear', t_mu: float=0.0, t_sigma: float=1.0, \
+        cfg_interval: list = [0.1, 1.0], cfg_scale: float = 1.0, div_eps: float=0.05, scheduler_params: dict=None, solver_params: dict = None
     ):
         """Velocity field module for flow matching.
         Args:
@@ -117,6 +129,8 @@ class VelocityField(nn.Module):
             t_scheduler_infer (str, optional): Name of the t scheduler for inference. Defaults to 'linear'.
             t_mu (float, optional): Mean of the Gaussian distribution for sampling t. Defaults to 0.0.
             t_sigma (float, optional): Standard deviation of the Gaussian distribution for sampling t. Defaults to 1.0.
+            cfg_interval (list, optional): Time interval which use classifier-free guidance. Defaults to [0.1, 1.0].
+            cfg_scale (int): Cfg scale value. 
             div_eps (float, optional): Epsilon value for numerical stability in velocity calculation. Defaults to 0.05.
             scheduler_params (dict, optional): Additional parameters for the scheduler. Defaults to None.
             solver_params (dict, optional): Additional parameters for the solver. Defaults to None.
@@ -145,6 +159,8 @@ class VelocityField(nn.Module):
         self.pred_type = pred_type
         self.loss_type = loss_type
         self.loss_fn = loss_fn
+        self.cfg_interval = cfg_interval
+        self.cfg_scale = cfg_scale
         self.div_eps = div_eps
         self.t_scheduler_train = t_scheduler_train
         self.t_scheduler_infer = t_scheduler_infer
@@ -161,6 +177,7 @@ class VelocityField(nn.Module):
         xt = path_sample.x_t
         t = path_sample.t
         v = path_sample.dx_t
+        
         out = self.model(xt, t, y=y)
         
         t = t.view(-1, 1, 1, 1)
