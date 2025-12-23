@@ -1,8 +1,9 @@
 meta: 
   name: vfad
 data:
-  data_root: data/mvtec_ad
-  dataset_name: mvtec_ad_all
+  data_root: data/realiad
+  dataset_name: realiad_all
+  meta_dir: data/realiad_meta/realiad_jsons
   category: all
   train_batch_size: 8 # per GPU batch size for training
   test_batch_size: 32 # per GPU batch size for evaluation
@@ -45,7 +46,7 @@ flow_matching:
   cfg_interval: 
     - 0.1
     - 1.0
-  cfg_scale: 2.0
+  cfg_scale: 1.0
   train_steps: -1
 model:
   backbone: 
@@ -69,29 +70,29 @@ model:
   depth: 16
   num_heads: 8
   mlp_ratio: 4.0
-  class_dropout_prob: 0.1
+  class_dropout_prob: 0.0
   use_class_labels: True
   learn_sigma: False
   t_scale: 1000
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_mc_ditG_enet_122315/
+  log_dir: logs/realiad_mc_ditG_enet_122316/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
   log_stdout: True
   ckpt:
-    save_latest: False
+    save_latest: True
     ckpt_epoch_freq: 500
     save_best: True
   wandb: 
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_mc_ditG_enet_122315
+    run_name: realiad_mc_ditG_enet_122316
   eval:
-    eval_epoch_freq: 25
+    eval_epoch_freq: 1
     steps: 3
     solver_name: euler
     img_score_agg: diff+sum

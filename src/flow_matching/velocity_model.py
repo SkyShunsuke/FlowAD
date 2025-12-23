@@ -66,7 +66,7 @@ class WrappedModel(nn.Module):
         
     def forward(self, x: torch.Tensor, t: torch.Tensor, y=None, **extras) -> torch.Tensor:
         
-        assert self.cfg_scale != 1.0 and y is None, "Classifier-free guidance requires conditioning information y."
+        assert self.cfg_scale == 1.0 or y is not None, "Classifier-free guidance requires conditioning information y."
         
         if self.cfg_scale != 1.0:
             extras.update({'cfg_scale': self.cfg_scale, 'cfg_interval': self.cfg_interval})

@@ -6,6 +6,7 @@ from torch.utils.data import ConcatDataset
 from .mvtec_ad import MVTecAD, AD_CLASSES
 from .visa import VisA, VISA_CLASSES
 from .mpdd import MPDD, MPDD_CLASSES
+from .realiad import RealIAD, REALIAD_CLASSES
 
 import logging
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
     elif dataset_name == 'mpdd':
         return ConcatDataset([MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'realiad':
+        return ConcatDataset([RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_all':
         dss = []
         for cat in AD_CLASSES:
@@ -72,6 +76,13 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
         for cat in MPDD_CLASSES:
             kwargs['category'] = cat
             dss.append(MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
+    elif dataset_name == 'realiad_all':
+        dss = []
+        for cat in REALIAD_CLASSES:
+            kwargs['category'] = cat
+            dss.append(RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
         return ConcatDataset(dss)
     else:
