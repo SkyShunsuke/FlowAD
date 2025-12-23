@@ -1,17 +1,36 @@
 meta: 
   name: vfad
-  global_seed: 0
-  use_bfloat16: False
 data:
   data_root: data/mvtec_ad
   dataset_name: mvtec_ad_all
   category: all
-  test_batch_size: 32 # per GPU batch size for evaluation
+  train_batch_size: 8 # per GPU batch size for training
+  test_batch_size: 8 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
   persistent_workers: False
   img_size: 256
   transform_type: imagenet
+opt:
+  epochs: 300
+  name: adamw
+  ipe_scale: 1.0
+  clip_grad: 1.0
+  wd_start: 0.0000
+  wd_end: 0.0000
+  lr_start: 0.000001
+  lr_warmup: 0.00005
+  lr_warmup_epochs: 40
+  lr_end: 0.000005
+  fix_lr_thres: -1
+  fix_wd_thres: -1
+  fix_lr_strategy: const
+  fix_wd_strategy: const
+  all_gather: False
+  use_bfloat16: True
+  bias_decay: False
+  norm_decay: False
+  global_seed: 0
 flow_matching:
   scheduler: 
     name: affine_prob
@@ -42,29 +61,34 @@ model:
   model_name: dit
   patch_size: 1
   cond_channels: 768
-  hidden_size: 2048
-  depth: 16
-  num_heads: 8
+  hidden_size: 768
+  depth: 12
+  num_heads: 12
   mlp_ratio: 4.0
   class_dropout_prob: 0.0
-  use_class_labels: False
+  use_class_labels: True
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_mc_ditG_enet_121719/checkpoints/ckpt_best.pth
+  resume_path: null
 logging:
-  log_dir: logs/ad_mc_ditG_enet_121719/
+  log_dir: logs/ad_mc_ditB_enet_121818/
+  log_step_freq: 100
+  use_tensorboard: True
+  use_csv: True
+  log_stdout: True
+  ckpt:
+    save_latest: False
+    ckpt_epoch_freq: 500
+    save_best: True
+  wandb: 
+    use_wandb: True
+    project_name: VFAD
+    entity: shuns71
+    run_name: ad_mc_ditB_enet_121818
   eval:
-    eval_strategy: inversion  # options: 'density', 'recon', 'inversion'
-    exact_divergence: False
-    steps: 1
-    # for density estimation if eval_strategy is 'density'
-    hutchinson_samples: 10
-    hutchinson_batch_size: 2
-    # for reconstruction if eval_strategy is 'recon'
-    inv_steps: 20
-    recon_steps: 20  # for reconstruction, we use inv/recon steps instead of 'steps'
-    inv_stop_time: 0.5
+    eval_epoch_freq: 25
+    steps: 3
     solver_name: euler
     img_score_agg: diff+sum
     metrics: 
@@ -75,6 +99,12 @@ logging:
       - px_ap
       - px_f1max
       - px_aupro
+  vis:
+    vis_epoch_freq: 500
+    steps: 50
+    solver_name: midpoint
+    num_samples_per_class: 16
+    denorm_type: imagenet
 
     
 

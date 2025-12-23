@@ -5,7 +5,7 @@ data:
   dataset_name: mvtec_ad
   category: hazelnut
   train_batch_size: 8 # per GPU batch size for training
-  test_batch_size: 32 # per GPU batch size for evaluation
+  test_batch_size: 8 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
   persistent_workers: False
