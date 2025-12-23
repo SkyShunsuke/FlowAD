@@ -416,23 +416,25 @@ class DiT(nn.Module):
         else:
             return self.unpatchify(x)  # (B, C, H, W)
         
-    def forward_with_cfg(self, x, t, y, cfg_scale):
+    def forward_with_cfg(self, x, t, y, cfg_scale=1.0, cfg_interval=[0, 1]):
         """
         Forward pass of DiT, but also batches the unconditional forward pass for classifier-free guidance.
         """
-        # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
-        half = x[: len(x) // 2]
-        combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y)
-        # For exact reproducibility reasons, we apply classifier-free guidance on only
-        # three channels by default. The standard approach to cfg applies it to all channels.
-        # This can be done by uncommenting the following line and commenting-out the line following that.
-        # eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
-        eps, rest = model_out[:, :3], model_out[:, 3:]
-        cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-        half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-        eps = torch.cat([half_eps, half_eps], dim=0)
-        return torch.cat([eps, rest], dim=1)
+        assert cfg_scale != 1.0 and self.class_dropout_prob > 0.0, \
+            "CFG scale must be different than 1.0 and class dropout prob must be > 0.0 to use CFG."
+        apply_cfg = (cfg_scale != 1.0) and (cfg_interval[0] <= t[0] <= cfg_interval[1])
+        
+        if apply_cfg:
+            # repeated x
+            x_ = torch.cat([x, x], dim=0)
+            y_ = torch.cat([y, y], dim=0)
+            t_ = torch.cat([t, t], dim=0)
+            y_[len(y):] = self.num_classes
+            model_out = self.forward(x_, t_, y_)
+            cond_out, uncond_out = model_out.chunk(2, dim=0)
+            return uncond_out + cfg_scale * (cond_out - uncond_out)
+        else:
+            return self.forward(x, t, y)
 
 def _approx_gelu():
     """Factory to match the original DiTBlock's GELU impl (approximate ‑ "tanh")."""

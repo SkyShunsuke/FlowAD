@@ -77,6 +77,7 @@ def evaluate_inv(
     
     logger.info("Extracting features and computing anomaly scores...")
     ptr = 0
+    ptr = 0
     for step, batch in tqdm(enumerate(dataloader), total=len(dataloader), disable=not verbose):
         current_idx = step * (get_world_size() * dataloader.batch_size)
         
@@ -126,16 +127,17 @@ def evaluate_inv(
         end = min(ptr + bs, N)
         bs_eff = end - ptr
         if bs_eff <= 0:
-            continue
+            break  # we've already filled N entries
+        
         vel_residual_all[ptr:end] = vel_residual[:bs_eff]
         clslabels_all[ptr:end] = cls_labels.cpu().numpy().astype(np.uint8)[:bs_eff]
         masks_all[ptr:end] = anom_masks.cpu().numpy().astype(np.uint8)[:bs_eff]
         anom_labels_all[ptr:end] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)[:bs_eff]
 
-        # -- store original images
         imgs = denormalize_image(imgs) * 255.0
-        imgs = imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)  # (B, H, W, C)
+        imgs = imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)
         org_imgs_all[ptr:end] = imgs[:bs_eff]
+        
         ptr = end
         
     # -- compute anomaly scores

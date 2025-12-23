@@ -5,7 +5,7 @@ data:
   dataset_name: mvtec_ad_all
   category: all
   train_batch_size: 8 # per GPU batch size for training
-  test_batch_size: 8 # per GPU batch size for evaluation
+  test_batch_size: 32 # per GPU batch size for evaluation
   num_workers: 8
   pin_memory: True
   persistent_workers: False
@@ -42,6 +42,10 @@ flow_matching:
     name: euler
   pred_type: velocity # [data, noise, velocity]
   loss_type: velocity # [data, noise, velocity]
+  cfg_interval: 
+    - 0.1
+    - 1.0
+  cfg_scale: 2.0
   train_steps: -1
 model:
   backbone: 
@@ -65,14 +69,14 @@ model:
   depth: 16
   num_heads: 8
   mlp_ratio: 4.0
-  class_dropout_prob: 0.0
+  class_dropout_prob: 0.1
   use_class_labels: True
   learn_sigma: False
   t_scale: 1000
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_mc_ditG_enet_121817/
+  log_dir: logs/ad_mc_ditG_enet_122015/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -85,7 +89,7 @@ logging:
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_mc_ditG_enet_121817
+    run_name: ad_mc_ditG_enet_122015
   eval:
     eval_epoch_freq: 25
     steps: 3
