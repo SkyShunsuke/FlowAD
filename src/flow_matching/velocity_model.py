@@ -3,7 +3,8 @@ import torch
 import torch.nn as nn
 from torch.distributions import Independent, Normal
 
-from src.flow_matching.path.scheduler import CondOTScheduler
+from src.flow_matching.path.scheduler import CondOTScheduler, VPScheduler, \
+    CosineScheduler, LinearVPScheduler
 from src.flow_matching.path import AffineProbPath
 from src.flow_matching.solver import Solver, ODESolver
 
@@ -29,6 +30,15 @@ def build_scheduler(scheduler_name: str, scheduler_params: dict) -> CondOTSchedu
     """
     if scheduler_name == 'affine_prob':
         scheduler = CondOTScheduler(**scheduler_params)
+        return AffineProbPath(scheduler)
+    elif scheduler_name == 'vp':
+        scheduler = VPScheduler(**scheduler_params)
+        return AffineProbPath(scheduler)
+    elif scheduler_name == 'cosine':
+        scheduler = CosineScheduler(**scheduler_params)
+        return AffineProbPath(scheduler)
+    elif scheduler_name == 'linear_vp':
+        scheduler = LinearVPScheduler(**scheduler_params)
         return AffineProbPath(scheduler)
     else:
         raise ValueError(f'Unknown scheduler name: {scheduler_name}')
@@ -91,6 +101,7 @@ class WrappedModel(nn.Module):
         Returns:
             torch.Tensor: The velocity field at x_t.
         """
+        t = t.view(-1, 1, 1, 1)
         div = t.expand_as(x_t)
         div = torch.clamp(div, min=self.eps)
         v_t = (x_t - out) / div
@@ -271,30 +282,33 @@ class VelocityField(nn.Module):
         
         # - build solver
         model = WrappedModel(self.model, self.path, self.pred_type, self.div_eps)
-        solver = build_solver(model, solver_name, solver_params or {})
+        # solver = build_solver(model, solver_name, solver_params or {})
 
         # - define timesteps
-        timesteps = torch.linspace(start_t, 1., steps).to(x0.device)
-        step_size = 1.0 / steps
+        timesteps = torch.linspace(start_t, 1., steps + 1).to(x0.device)
+        step_size = (1.0 - start_t) / steps
         
-        # - sample with solver
-        # NOTE: if you pass step_size to solver, it will prioritize step_size over timegrid.
-        samples = solver.sample(
-            time_grid=timesteps,
-            x_init=x0,
-            method=solver_name,
-            step_size=step_size,
-            return_intermediate=True,
-            y=y,
-        )  
-        if return_intermediate:
-            return samples  # List of intermediate results
-        else:
-            if isinstance(samples, list):
-                return samples[-1]  # Final result
-            else:
-                return samples
-    
+        x_in = x0
+        for i in range(steps):
+            # print(f"Sampling step {i+1}/{steps}...")
+            t_in = timesteps[i]
+            t_in = t_in.expand(x_in.shape[0])
+            x_in = x_in + model(x_in, t_in, y=y) * step_size
+        samples = x_in
+        return samples
+
+    def perturb(self, x1, x0, t):
+        """Perturb the data points for training.
+        Args:
+            x1 (torch.Tensor): The ending points.
+            x0 (torch.Tensor): The starting points.
+            t (torch.Tensor): The time steps.
+        Returns:
+            torch.Tensor: The perturbed points.
+        """
+        path_sample = self.path.sample(t=t, x_0=x0, x_1=x1)
+        return path_sample.x_t
+
     def invert(self, x1, y, steps: int, solver_name: str='euler', solver_params: dict=None, return_intermediate: bool=False, stop_time: float=0.0):
         """Invert the velocity field using the specified solver.
         Args:

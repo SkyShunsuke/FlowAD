@@ -7,6 +7,8 @@ from .mvtec_ad import MVTecAD, AD_CLASSES
 from .visa import VisA, VISA_CLASSES
 from .mpdd import MPDD, MPDD_CLASSES
 from .realiad import RealIAD, REALIAD_CLASSES
+from .mulsenad import MULSENAD, MULSEN_CLASSES
+from .viaduct import VIADUCT, VIADUCT_CLASSES
 
 import logging
 logger = logging.getLogger(__name__)
@@ -71,6 +73,13 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
             dss.append(VisA(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
         return ConcatDataset(dss)
+    elif dataset_name == 'mulsenad_all':
+        dss = []
+        for cat in MULSEN_CLASSES:
+            kwargs['category'] = cat
+            dss.append(MULSENAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
     elif dataset_name == 'mpdd_all':
         dss = []
         for cat in MPDD_CLASSES:
@@ -83,6 +92,13 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
         for cat in REALIAD_CLASSES:
             kwargs['category'] = cat
             dss.append(RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
+    elif dataset_name == 'viaduct_all':
+        dss = []
+        for cat in VIADUCT_CLASSES:
+            kwargs['category'] = cat
+            dss.append(VIADUCT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
         return ConcatDataset(dss)
     else:

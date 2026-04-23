@@ -143,7 +143,6 @@ class WandbLogger:
         self.rank = rank
         self.use_wandb = (rank == 0)
         if self.use_wandb:
-            import wandb
             wandb.init(project=project_name,
                        name=run_name,
                        entity=entity,

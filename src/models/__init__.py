@@ -29,7 +29,7 @@ def create_unet_model(latent_size=32, model_channels=256, num_res_blocks=2, num_
                     channel_mult = channel_mult,
                     num_head_channels= model_channels//num_heads,
                     use_spatial_transformer= False,
-                    ncls=ncls,
+                    num_classes=ncls,
                     transformer_depth= 2,
                     context_dim=None,
                 )

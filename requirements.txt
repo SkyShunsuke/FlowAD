@@ -1,5 +1,5 @@
-torch==2.5.1
-torchvision==0.20.1
+torch==2.7.0
+torchvision==0.22.0
 torchdiffeq
 tqdm==4.67.1
 wandb==0.19.6

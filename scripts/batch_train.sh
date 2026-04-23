@@ -1,15 +1,14 @@
-#!/bin/sh
-# PBS -q rt_HF
-# PBS -l select=1
-# PBS -l walltime=10:00:00
-# PBS -P gch51615
+#!/bin/bash
+#SBATCH --job-name=vp2
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH --partition=all
+#SBATCH --gres=gpu:nvidia_rtx_pro_6000_blackwell_max-q_workstation_edition:1
 
-export PYENV_ROOT="$HOME/.pyenv" && export PATH="$PYENV_ROOT/bin:$PATH" && eval "$(pyenv init --path)" && eval "$(pyenv init -)"
-pyenv activate invad
-
-cd ${PBS_O_WORKDIR}
-
-# source /etc/profile.d/modules.sh
-# module load cuda/12.6/12.6.1
-
-bash scripts/train.sh > logs/train.log 2>&1
+nvidia-smi
+bash scripts/train.sh > logs/train_output_vp2.log 2>&1

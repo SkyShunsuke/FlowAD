@@ -27,7 +27,7 @@ opt:
   fix_lr_strategy: const
   fix_wd_strategy: const
   all_gather: False
-  use_bfloat16: True
+  use_bfloat16: False
   bias_decay: False
   norm_decay: False
   global_seed: 0
@@ -72,7 +72,7 @@ model:
 resume:
   resume_path: null
 logging:
-  log_dir: logs/ad_mc_ditB_enet_121818/
+  log_dir: logs/ad_mc_ditB_enet_test/
   log_step_freq: 100
   use_tensorboard: True
   use_csv: True
@@ -80,14 +80,14 @@ logging:
   ckpt:
     save_latest: False
     ckpt_epoch_freq: 500
-    save_best: True
+    save_best: False
   wandb: 
     use_wandb: True
     project_name: VFAD
     entity: shuns71
-    run_name: ad_mc_ditB_enet_121818
+    run_name: ad_mc_ditB_enet_test
   eval:
-    eval_epoch_freq: 25
+    eval_epoch_freq: 500
     steps: 3
     solver_name: euler
     img_score_agg: diff+sum

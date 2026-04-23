@@ -32,6 +32,7 @@ def evaluate_recon(
     eval_params: dict = None,
     save_anomaps: bool = False,
     save_dir: str = None,
+    **kwargs
 ):
     """Evaluate on the given dataset with inversion-informed reconstruction, returning AD metrics.
     Args:
@@ -72,12 +73,17 @@ def evaluate_recon(
     anom_labels_all = np.zeros((N,), dtype=np.uint8)
     mse_all = np.zeros((N, *img_sz), dtype=np.float32)
     org_imgs_all = np.zeros((N, img_sz[0], img_sz[1], 3), dtype=np.uint8)
+    recon_imgs_all = np.zeros((N, img_sz[0], img_sz[1], 3), dtype=np.uint8)
     
     if distributed:
         # -- extract the underlying model from DDP
         vf = vf.module
     
     logger.info("Extracting features and computing anomaly scores...")
+    # noise = torch.randn((1, 768, 16, 16), device=device)
+    noise = torch.randn((1, 272, 16, 16), device=device)
+    # noise = torch.randn((1, 16, 16, 16), device=device)
+    perturb_t = torch.tensor([inv_stop_time], device=device)
     for step, batch in tqdm(enumerate(dataloader), total=len(dataloader), disable=not verbose):
         current_idx = step * dataloader.batch_size * get_world_size()
         
@@ -89,14 +95,12 @@ def evaluate_recon(
         
         # -- extract features
         z1, _ = extract_features(fe, imgs_local, device)  # (B, c, h, w)
+        # posterior = fe.encode(imgs_local)  # (B, c, h, w)
+        # z1 = posterior.sample().mul_(0.2325)  # (B, c, h, w)
         z1 = norm_fn(z1)
         
-        # -- inversion through the velocity field
-        if use_bfloat16:
-            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                zt = vf.invert(z1, clslabels_local, steps=inv_steps, solver_name=solver_name, solver_params=solver_params, stop_time=inv_stop_time) # (B, c, h, w)
-        else:
-            zt = vf.invert(z1, clslabels_local, steps=inv_steps, solver_name=solver_name, solver_params=solver_params, stop_time=inv_stop_time) # (B, c, h, w)
+        # -- pertubation
+        zt = vf.perturb(z1, noise.repeat(len(z1), 1, 1, 1), perturb_t.repeat(len(z1))) # (B, c, h, w)
         
         # -- reconstruction through the velocity field
         if use_bfloat16:
@@ -105,8 +109,14 @@ def evaluate_recon(
         else:
             z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
         
+        # reconstruct images from features for visualization
+        # recon_imgs_local = fe.decode(z1_local / 0.2325) # (B, C, H, W)
+
         # -- compute reconstruction error as anomaly score
         mse_local = F.mse_loss(z1_local, z1, reduction='none').sum(dim=1)  # (B, h, w)
+        # imgs_local = ((imgs_local.clamp(-1, 1) + 1) / 2) * 255.0 # denormalize_image(imgs_local) * 255.0
+        # recon_imgs_local = ((recon_imgs_local.clamp(-1, 1) + 1) / 2) * 255.0
+        # mse_local = F.mse_loss(recon_imgs_local, imgs_local, reduction='none').mean(dim=1)  # (B, h, w)
         
         # -- share results across GPUs
         if distributed:
@@ -115,12 +125,14 @@ def evaluate_recon(
             cls_labels = concat_all_gather(clslabels_local)
             anom_masks = concat_all_gather(anom_masks_local)
             imgs = concat_all_gather(imgs_local)
+            # recon_imgs = concat_all_gather(recon_imgs_local)
         else:
             mse = mse_local
             anom_labels = anom_labels_local
             cls_labels = clslabels_local
             anom_masks = anom_masks_local
             imgs = imgs_local
+            # recon_imgs = recon_imgs_local
         
         # -- compute anomaly scores
         mse = F.interpolate(
@@ -135,9 +147,10 @@ def evaluate_recon(
         masks_all[current_idx: current_idx + bs] = anom_masks.cpu().numpy().astype(np.uint8)
         anom_labels_all[current_idx: current_idx + bs] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
         
-        imgs = denormalize_image(imgs) * 255.0
         imgs = imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)  # (B, H, W, C)
+        # recon_imgs = recon_imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)  # (B, H, W, C)
         org_imgs_all[current_idx: current_idx + bs] = imgs
+        # recon_imgs_all[current_idx: current_idx + bs] = recon_imgs
     
     # -- compute anomaly scores
     px_scores = mse_all  # (N, H, W)
@@ -154,6 +167,7 @@ def evaluate_recon(
     px_scores_by_class = divide_by_class(px_scores, clslabels_all)
     px_gts_by_class = divide_by_class(px_gts, clslabels_all)
     org_imgs_by_class = divide_by_class(org_imgs_all, clslabels_all)
+    recon_imgs_by_class = divide_by_class(recon_imgs_all, clslabels_all)
     clsname_map = dataloader.dataset.datasets[0].labels_to_names
 
     # -- save anomaly maps if required
@@ -166,6 +180,7 @@ def evaluate_recon(
             px_gts_by_class=px_gts_by_class,
             org_img_by_class=org_imgs_by_class,
             class_map=clsname_map,
+            recon_imgs_by_class=recon_imgs_by_class,
         )
     if torch.distributed.is_initialized():
         torch.distributed.barrier()
@@ -201,7 +216,23 @@ def evaluate_recon(
         cls_name = clsname_map[cls_label]
         for met_name, met_value in cls_px_metrics.items():
             eval_results[cls_name][met_name] = met_value
-    
+        
+        # anom_px_scores = cls_px_scores[cls_px_gts > 0].flatten()
+        # norm_px_scores = cls_px_scores[cls_px_gts == 0].flatten()
+        # # plot histogram of anomaly scores for anomalous and normal pixels
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots()
+        # # ax.hist(norm_px_scores, bins=50, alpha=0.5, label='Normal Pixels')
+        # ax.hist(anom_px_scores, bins=50, alpha=0.5, label='Anomalous Pixels')
+        # ax.set_xlim(0, 6000)
+        # ax.set_ylim(0, 120000)
+        # ax.set_title(f'Pixel-level Anomaly Scores for Class {cls_name}')
+        # ax.set_xlabel('Anomaly Score')
+        # ax.set_ylabel('Frequency')
+        # ax.legend()
+        # plt.savefig(f'px_score_histogram_{cls_name}_{recon_steps}_anom.png')
+        # plt.close(fig)
+        
     # -- average over classes
     eval_results['average'] = {}
     for cls_name in eval_results.keys():

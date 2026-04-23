@@ -1,15 +1,7 @@
-# We use torchrun to launch the training with 8 GPUs on a single node
-# By default, it support 8 GPUs; change --nproc-per-node if needed
-
-GPU_NUM=1  # REPLACE with the number of GPUs you want to use
-ADDR=localhost # REPLACE with the master node address if using multiple nodes
-PORT=12354  # REPLACE with an available port number
-CONFIG_FILE=./configs/train/realiad_ditG.yaml  # REPLACE with your config file path
-
+#!/bin/bash
+export WANDB_API_KEY=ec54c112b7a4f2600ac4e283c5dfd1f8f06df606
 torchrun \
-    --nnodes=1 \
-    --nproc-per-node=$GPU_NUM \
-    --node_rank=0 \
-    --master_addr=$ADDR \
-    --master_port=$PORT \
-    main.py --config_file $CONFIG_FILE --task train
+  --standalone \
+  --nnodes=1 \
+  --nproc-per-node=1 \
+  main.py --config_file ./configs/train/ad_ditB_vp.yaml --task train

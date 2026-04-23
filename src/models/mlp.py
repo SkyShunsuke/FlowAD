@@ -99,6 +99,38 @@ class FinalLayer(nn.Module):
         x = self.linear(x)
         return x
 
+class LabelEmbedder(nn.Module):
+    """Embeds class labels into vector representations."""
+
+    def __init__(self, num_classes, hidden_size, dropout_prob):
+        super().__init__()
+        self.num_classes = num_classes
+        self.hidden_size = hidden_size
+        self.dropout_prob = dropout_prob
+        
+        use_cfg_embedding = dropout_prob > 0.0
+        self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)  # we add cfg embedding which represent "no class information"
+        self.num_classes = num_classes
+        self.dropout_prob = dropout_prob
+        
+    def token_drop(self, labels, force_drop_ids=None):
+        """
+        Drops label information to enable CFG. 
+        """
+        if force_drop_ids is None:
+            drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob  # (B, )
+        else:
+            drop_ids = force_drop_ids == 1
+        labels = torch.where(drop_ids, self.num_classes, labels)
+        return labels
+
+    def forward(self, labels, train, force_drop_ids=None):
+        use_drop_out = train and self.dropout_prob > 0.0
+        if use_drop_out or force_drop_ids is not None:
+            labels = self.token_drop(labels, force_drop_ids)
+        embeddings = self.embedding_table(labels)
+        return embeddings
+
 class SimpleMLPAdaLN(nn.Module):
     def __init__(
         self,
@@ -121,7 +153,7 @@ class SimpleMLPAdaLN(nn.Module):
         
         self.input_proj = nn.Linear(in_channels, model_channels, bias=True)
         self.time_embed = TimestepEmbedder(model_channels)
-        self.cond_embed = nn.Linear(z_channels, model_channels)
+        self.y_embedder = LabelEmbedder(15, model_channels, 0.0)
         
         res_blocks = []
         for _ in range(num_blocks):
@@ -142,6 +174,9 @@ class SimpleMLPAdaLN(nn.Module):
 
         nn.init.normal_(self.time_embed.mlp[0].weight, std=0.02)
         nn.init.normal_(self.time_embed.mlp[2].weight, std=0.02)
+
+        # Initialize label embedding table:
+        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
         
         # Zero out adaLN modulation weights
         for block in self.res_blocks:
@@ -168,19 +203,20 @@ class SimpleMLPAdaLN(nn.Module):
         x = self.input_proj(x) # (B, D)
         t = self.time_embed(t)
         if y is not None:
-            y = self.cond_embed(y)
-            y = t + y
+            y = self.y_embedder(y, self.training)  # (B, D)
+            cond = t + y
         else:
-            y = t
-        y = y.unsqueeze(1)  # (B, 1, D)
+            cond = t
+        cond = cond.unsqueeze(1)  # (B, 1, D)
+        cond = cond.expand(-1, x.shape[1], -1)  # (B, N, D)
         if self.grad_checkpoint and not torch.jit.is_scripting():
             for block in self.res_blocks:
-                x = torch.utils.checkpoint.checkpoint(block, x, y)
+                x = torch.utils.checkpoint.checkpoint(block, x, cond)
         else:
             for block in self.res_blocks:
-                x = block(x, y)
+                x = block(x, cond)
         
-        x = self.final_layer(x, y)
+        x = self.final_layer(x, cond)
         x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)  # (B, C, H, W)
         return x
         
