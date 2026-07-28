@@ -1,7 +1,7 @@
 #!/bin/bash
-export WANDB_API_KEY=ec54c112b7a4f2600ac4e283c5dfd1f8f06df606
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 torchrun \
   --standalone \
   --nnodes=1 \
-  --nproc-per-node=1 \
-  main.py --config_file ./configs/train/ad_ditB_vp.yaml --task train
+  --nproc-per-node=8 \
+  main.py --config_file ./configs/train/ad_two_layer_mlp_vae.yaml --task train

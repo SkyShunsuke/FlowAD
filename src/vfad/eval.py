@@ -107,15 +107,11 @@ def main(params, args):
     logger.info(f"Data loaders built. Number of evaluation samples: {len(test_dataset)}, "
                 f"Number of test samples: {len(test_dataset)}, ")
     
-    # build model
-    # 
+    # build model    
     feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
     fe = get_backbone(**params['model']['backbone'])
     feat_norm_method = params['model']['backbone'].get('normalization', None)
-    # feat_sz = (272, 16, 16)
-    # get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
-    # from src.backbones.vae import AutoencoderKL
-    # fe = AutoencoderKL(embed_dim=16, ch_mult=[1,1,2,2,4], use_variational=True, ckpt_path="/home/sshun/FlowAD/kl16.ckpt")
+
     norm_fn = get_normalization_func(feat_norm_method)
     fe.to(device).eval()
     logger.info(f"Backbone {params['model']['backbone']['model_name']} initialized.")
@@ -182,60 +178,23 @@ def main(params, args):
 
     # -- evaluate
     logger.info(f"Starting evaluation...")
-    # eval_steps = np.linspace(0, 1, num=50).tolist()
-    # eval_steps = [0.1]
-    # results = []
-    # for perturb_step in eval_steps:
-    #     logger.info(f"Evaluating with perturbation step: {perturb_step:.4f}...")
-    #     eval_params['inv_stop_time'] = perturb_step
-    recon_steps = list(range(1, 10)) + list(range(10, 110, 10)) + [150, 200, 300, 500, 1000]
-    # recon_steps = list(range(60, 110, 10)) + [150, 200, 300, 500, 1000]
-    for i in tqdm(recon_steps, desc="Evaluating reconstruction with different steps"):
-        logger.info(f"Evaluating with reconstruction steps: {i}...")
-        eval_params['recon_steps'] = i
-        eval_results = eval_func(
-            vf=vf,
-            fe=fe,
-            norm_fn=norm_fn,
-            dataloader=test_loader,
-            device=device,
-            img_sz=(params['data']['img_size'], params['data']['img_size']),
-            verbose=True,
-            use_bfloat16=params['meta']['use_bfloat16'],
-            distributed=args.distributed,
-            save_anomaps=eval_params.get('save_anomaps', False),
-            save_dir=eval_params.get('save_dir', None),
-            eval_params=eval_params,
-            train_loader=train_loader,
-        )
-        # category = params['data']['category']
-        # results.append(eval_results[category])
-        # logger.info(f"Evaluation completed. Results: {eval_results}")
-
-        csv_path = os.path.join(eval_params.get('save_dir', '.'), f'eval_results_{eval_params.get("recon_steps", 1)}.csv')
-
-        # 各カテゴリを行、metric を列にする
-        df = pd.DataFrame.from_dict(eval_results, orient='index')
-
-        # index を列として保存したい場合
-        df.index.name = 'category'
-        df.reset_index(inplace=True)
-
-        df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-
-        # logger.info(f"Evaluation results saved to CSV: {csv_path}")
-    
-    # plot performance curve across perturbation steps
-    # import matplotlib.pyplot as plt
-    # fig = plt.figure()
-    # plt.plot(eval_steps, results, marker='o')
-    # plt.title('P-AUROC vs Perturbation Step')
-    # plt.xlabel('Perturbation Step')
-    # plt.ylabel('P-AUROC')
-    # plt.grid()
-    # plot_save_path = os.path.join(log_dir, 'p_auroc_vs_perturbation.png')
-    # fig.savefig(plot_save_path)
-    # logger.info(f"Saved P-AUROC vs Perturbation plot to {plot_save_path}")
+    logger.info(f"Evaluating with reconstruction steps: {i}...")
+    eval_results = eval_func(
+        vf=vf,
+        fe=fe,
+        norm_fn=norm_fn,
+        dataloader=test_loader,
+        device=device,
+        img_sz=(params['data']['img_size'], params['data']['img_size']),
+        verbose=True,
+        use_bfloat16=params['meta']['use_bfloat16'],
+        distributed=args.distributed,
+        save_anomaps=eval_params.get('save_anomaps', False),
+        save_dir=eval_params.get('save_dir', None),
+        eval_params=eval_params,
+        train_loader=train_loader,
+        noise_shape=feat_sz,
+    )
     
     # -- save results
     if is_main():

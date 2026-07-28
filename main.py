@@ -28,6 +28,7 @@ def parse_args():
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument("--distributed", action="store_true")
+    parser.add_argument("--img_metric_only", action="store_true", help="Only evaluate image-level metrics (AUROC, AUPR, F1-max) without pixel-level metrics (PRO, AU-PRO, etc.)")
     args = parser.parse_args()
     return args
 
@@ -41,6 +42,7 @@ def main(params, args):
         framework = params['meta']['name']
         if framework == "vfad":
             from src.vfad.train import main as vfad_train
+            # from src.vfad.train_point import main as vfad_train
             vfad_train(params, args)
         else:
             raise NotImplementedError(f"Pretraining for framework {framework} is not implemented.")
@@ -48,6 +50,7 @@ def main(params, args):
         framework = params['meta']['name']
         if framework == "vfad":
             from src.vfad.eval import main as vfad_eval
+            # from src.vfad.eval_point import main as vfad_eval
             vfad_eval(params, args)
     else:
         raise ValueError(f"Unknown task: {task}")

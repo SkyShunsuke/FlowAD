@@ -1,17 +1,17 @@
-from .mlp import SimpleMLPAdaLN
+from .mlp import SimpleMLPAdaLN, TwoLayerReLUDenoiser
 from .unet import UNetModel
-from .dit import DiT, DiTMoE
+from .dit import DiT
 
 def init_model(model_name, **kwargs):
     model_constructors = {
         'mlp': SimpleMLPAdaLN,
+        'two_layer_mlp': TwoLayerReLUDenoiser,
         'unet_xs': UNET_XS,
         'unet_s': UNET_S,
         'unet_m': UNET_M,
         'unet_l': UNET_L,
         'unet_xl': UNET_XL,
         'dit': DiT,
-        'dit_moe': DiTMoE,
     }
     if model_name not in model_constructors:
         raise ValueError(f"Model {model_name} not recognized. Available models: {list(model_constructors.keys())}")

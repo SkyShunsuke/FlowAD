@@ -146,8 +146,14 @@ def main(params, args):
                 f"Iterations per epoch: {ipe}")
     
     # build model
-    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
-    fe = get_backbone(**params['model']['backbone'])
+    # feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
+    # fe = get_backbone(**params['model']['backbone'])
+    # from src.backbones import md3mu_backbone
+    # fe = md3mu_backbone()
+    from src.backbones.vae import create_vae
+    fe = create_vae(**params['model']['backbone'])
+    feat_sz = (16, 16, 16)
+    
     feat_norm_method = params['model']['backbone'].get('normalization', None)
     norm_fn = get_normalization_func(feat_norm_method)
     fe.to(device).eval()
@@ -181,6 +187,16 @@ def main(params, args):
         scheduler_params=params['flow_matching']['scheduler'].get('params', None),
         solver_params=params['flow_matching']['solver'].get('params', None),
     )
+    # from src.diffusion.denoiser import Denoiser
+    # vf = Denoiser(
+    #     model=model,
+    #     input_sz=feat_sz,
+    #     scheduler_name=params['flow_matching']['scheduler']['name'],
+    #     solver_name=params['flow_matching']['solver']['name'],
+    #     loss_fn=loss_type,
+    #     scheduler_params=params['flow_matching']['scheduler'].get('params', None),
+    #     num_sampling_steps=params['flow_matching']['solver'].get('num_sampling_steps', 10),
+    # )
     logger.info(f"Velocity Field Model {params['model']['model_name']} has been initialized.")
     
     # optimizer, scheduler, scaler
@@ -249,6 +265,30 @@ def main(params, args):
     logger.info(f"Starting training for {num_epochs} epochs...")
     best_mad = 0.0 if save_best else 1e4
     
+    all_latents = {}
+    train_loader_all = torch.utils.data.DataLoader(
+        train_dataset,
+        sampler=None,
+        batch_size=train_bs,
+        pin_memory=params['data'].get('pin_memory', True),
+        num_workers=params['data'].get('num_workers', 4),
+        persistent_workers=params['data'].get('persistent_workers', True),
+        drop_last=False,
+    )
+    
+    from tqdm import tqdm
+    for batch in tqdm(train_loader_all):
+        imgs, labels = batch["img"], batch["clslabel"]
+        pathid = batch["path"]
+        with torch.no_grad():
+            z1 = fe.encode(imgs.to(device)).sample().mul_(0.18215)
+        
+        for i in range(len(labels)):
+            path = pathid[i]
+            latent = z1[i].detach().cpu()
+            all_latents[path] = latent
+    logger.info(f"Extracted latents for all training samples. Total: {len(all_latents)}")
+    
     for epoch in range(start_epoch, num_epochs + 1):
         logger.info(f"Starting epoch {epoch}/{num_epochs}")
 
@@ -264,13 +304,28 @@ def main(params, args):
 
             # -- load images and labels
             imgs, labels = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
+            path = batch["path"]
             imgs, labels = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
 
             # -- feature extraction (sample z1)
             start, end = CUDAEvent(enable_timing=True), CUDAEvent(enable_timing=True)
             start.record()
             with torch.no_grad():
-                z1, _ = fe(imgs)  # (B, c, h, w)
+                pass
+                # z1 = imgs
+                # out = fe(batch)
+                # z1 = out["fusion_feature_map"]
+                # z1, _ = fe(imgs)  # (B, c, h, w)
+                # z1 = fe.encode(imgs).sample().mul_(0.18215)  # (B, c, h, w)
+            
+            # collate latents for the batch
+            z1_list = []
+            for i in range(len(labels)):
+                path_i = path[i]
+                latent_i = all_latents[path_i]
+                z1_list.append(latent_i)
+            z1 = torch.stack(z1_list, dim=0).to(device)    
+            
             end.record()
             
             # feature normalization

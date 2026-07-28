@@ -55,13 +55,6 @@ def build_solver(model: nn.Module, solver_name: str, solver_params: dict) -> Sol
         Solver: Configured solver.
     """
     return ODESolver(model, **solver_params)
-
-def logit_t(bs: int, device: torch.device, mu=0., sigma=1.) -> torch.Tensor:
-    # -- sample t from gaussian
-    t = torch.randn(bs, device=device) * sigma + mu
-    # -- apply sigmoid
-    t = torch.sigmoid(t)
-    return t
     
 class WrappedModel(nn.Module):
     """A wrapper for the velocity model to handle additional conditioning information."""
@@ -181,7 +174,7 @@ class VelocityField(nn.Module):
         self.path = build_scheduler(scheduler_name, scheduler_params or {})
         self.solver = build_solver(model, solver_name, solver_params or {})
         
-    def compute_loss(self, x0, x1, path_sample, y=None):
+    def compute_loss(self, x0, x1, path_sample, y=None, **model_kwargs):
         """Compute the flow matching loss based on the specified loss type.
         """
         # Get the model prediction
@@ -189,7 +182,7 @@ class VelocityField(nn.Module):
         t = path_sample.t
         v = path_sample.dx_t
         
-        out = self.model(xt, t, y=y)
+        out = self.model(xt, t, y=y, **model_kwargs)
         
         t = t.view(-1, 1, 1, 1)
         recip_one_minus_t = 1.0 / torch.clamp(1 - t, min=self.div_eps)
@@ -228,7 +221,7 @@ class VelocityField(nn.Module):
             raise NotImplementedError(f"Loss function {self.loss_fn} not implemented.")
         return loss
         
-    def forward(self, x1, y=None):
+    def forward(self, x1, y=None, **model_kwargs):
         """Compute the loss for flow matching.
         Args:
             x0 (torch.Tensor): The starting points.
@@ -255,14 +248,17 @@ class VelocityField(nn.Module):
         else:
             t = cand_t.to(device)
         
+        # cand_t = torch.linspace(0.8, 1., 11)[:-1]  
+        t = cand_t[torch.randint(0, len(cand_t), (bs,))].to(device)
+        
         # - sample intermediate points along the path
         path_sample = self.path.sample(t=t, x_0=x0, x_1=x1)
         
         # - flow matching loss (l2)
-        loss = self.compute_loss(x0, x1, path_sample, y=y)
+        loss = self.compute_loss(x0, x1, path_sample, y=y, **model_kwargs)
         return loss
     
-    def sample(self, x0, y, steps: int, return_intermediate: bool=False, solver_name: str='euler', solver_params: dict=None, start_t: float=0.0):
+    def sample(self, x0, y, steps: int, return_intermediate: bool=False, solver_name: str='euler', solver_params: dict=None, start_t: float=0.0, **model_kwargs):
         """Sample from the velocity field using the specified solver.
         Args:
             x0 (torch.Tensor): The starting points.
@@ -288,14 +284,35 @@ class VelocityField(nn.Module):
         timesteps = torch.linspace(start_t, 1., steps + 1).to(x0.device)
         step_size = (1.0 - start_t) / steps
         
+        v_traj = []
         x_in = x0
         for i in range(steps):
             # print(f"Sampling step {i+1}/{steps}...")
             t_in = timesteps[i]
             t_in = t_in.expand(x_in.shape[0])
-            x_in = x_in + model(x_in, t_in, y=y) * step_size
+            v_pred = model(x_in, t_in, y=y, **model_kwargs)
+            x_in = x_in + v_pred * step_size
+            v_traj.append(v_pred)
+        if return_intermediate:
+            return x_in, v_traj  # List of intermediate results
         samples = x_in
         return samples
+    
+    def sample_ddim(self, x0, y, steps: int, start_t: float=0.0, **model_kwargs):
+        x = x0.clone()
+        timesteps = torch.linspace(start_t, 1., steps + 1).to(x0.device)
+        ones = torch.ones_like(x0) 
+        for i in range(steps):
+            t_cur = timesteps[i] * ones
+            t_cur_model = timesteps[i].expand(x.shape[0])
+            t_nxt = timesteps[i + 1] * ones
+            eps = self.model(x, t_cur_model, y=y, **model_kwargs)
+            out_nxt = self.path.scheduler(t_nxt)
+            x1_hat = self.path.epsilon_to_target(epsilon=eps, x_t=x, t=t_cur)
+            # eta = 0 
+            x = out_nxt.alpha_t * x1_hat + out_nxt.sigma_t * eps
+        return x
+            
 
     def perturb(self, x1, x0, t):
         """Perturb the data points for training.

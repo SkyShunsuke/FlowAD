@@ -1,2 +1,0 @@
-export PYENV_ROOT="$HOME/.pyenv" && export PATH="$PYENV_ROOT/bin:$PATH" && eval "$(pyenv init --path)" && eval "$(pyenv init -)" && pyenv activate invad && cd projects/FlowAD
-qsub -I -P gch51615 -q rt_HG -l select=1 -l walltime=2:00:00

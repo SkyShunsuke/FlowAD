@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torchvision import models
 from torchvision.models import VGG19_Weights, EfficientNet_V2_S_Weights, EfficientNet_V2_M_Weights, EfficientNet_V2_L_Weights, ResNet50_Weights
 from .efficientnet import build_efficient
+from .vae import create_vae
 
 from einops import rearrange
 
@@ -15,6 +16,19 @@ class PDNWrapper(nn.Module):
     def forward(self, x):
         out = self.model(x)
         return out, [out]  # Return the output and a list of features (single feature in this case)
+    
+class VAEWrapper(nn.Module):
+    def __init__(self, model):
+        super(VAEWrapper, self).__init__()
+        self.model = model
+        
+    def forward(self, x):
+        out = self.model(x).sample().mul_(0.18215)  # Scale the output to match the latent space scaling
+        return out, [out]  # Return the output and a list of features (single feature in this case)
+    
+    def encode(self, x):
+        out = self.model.encode(x)  
+        return out
 
 class DINOWrapper(nn.Module):
     def __init__(self, model, out_blocks=None, out_res=None, **kwargs):
@@ -88,6 +102,8 @@ def get_normalization_func(normalization_method=None):
 def get_backbone_feature_shape(model_name):
     if model_name == "efficientnet-b4":
         return (272, 16, 16)
+    elif model_name == "vae-kl16":
+        return (16, 16, 16)
     elif model_name == "wide_resnet50_2":
         return (2048, 8, 8)
     elif model_name == "dinov2-small":
@@ -214,11 +230,12 @@ def get_backbone(**kwargs):
     elif 'pdn_medium' in model_name:
         net = get_pdn_medium(**kwargs)
         return PDNWrapper(net)
+    elif 'vae' in model_name:
+        net = create_vae(**kwargs)
+        return VAEWrapper(net)
     elif 'efficientnet' in model_name:
-        # net = get_efficientnet(model_name, pretrained=True, outblocks=[1, 5, 9, 21], outstrides=[2, 4, 8, 16])
         net =  get_efficientnet(**kwargs)
         return BackboneWrapper(net, scale_factors=[0.125, 0.25, 0.5, 1.0])
-        # return BackboneWrapper(net, target_size=(32, 32))
     elif 'dinov1' in model_name:
         net = get_dino(model_name, **kwargs)
         return net
@@ -347,7 +364,7 @@ class BackboneWrapper(nn.Module):
             y = out
         concat_y = torch.cat([downsample(y[i]) for i, downsample in enumerate(self.downsamples)], dim=1)
         return concat_y, y
-    
+        
 if __name__ == "__main__":
     model_kwargs = {
         'model_type': 'wide_resnet50_2',

@@ -66,13 +66,14 @@ class RealIAD(Dataset):
                 return torch.from_numpy(np.array(img, dtype=np.uint8)).long()
             self.mask_transform = transforms.Compose(
                 [
-                    transforms.Resize(input_res, interpolation=InterpolationMode.NEAREST),
+                    transforms.Resize((self.input_res, self.input_res), interpolation=InterpolationMode.NEAREST),
                     transforms.Lambda(mask_to_tensor)
                 ]
             )
             self.normal_indices = [i for i, label in enumerate(self.labels) if label == 0]
             self.anom_indices = [i for i, label in enumerate(self.labels) if label == 1]
         self.num_classes = len(REALIAD_CLASSES)
+        self.labels_to_names = {i: name for i, name in enumerate(REALIAD_CLASSES)}
         
     def __getitem__(self, index):
         inputs = {}
@@ -102,13 +103,13 @@ class RealIAD(Dataset):
                 inputs["anom_type"] = str(img_file).split("/")[-3]
             if self.is_mask:
                 if self.labels_str[index] == NORMAL_PREFIX:
-                    mask = np.zeros((self.input_res, self.input_res))
+                    mask = Image.new('L', (self.input_res, self.input_res), 0)
                 else:
                     mask_file = self.masks[index]
                     with open(mask_file, 'rb') as f:
                         mask = Image.open(f)
                         mask = mask.convert('L')
-                    mask = self.mask_transform(mask)
+                mask = self.mask_transform(mask)
                 inputs["mask"] = mask
             return inputs
                 

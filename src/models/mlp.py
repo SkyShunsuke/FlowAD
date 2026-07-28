@@ -11,6 +11,7 @@ from typing import Tuple
 
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
 from einops import rearrange
+import torch.nn.functional as F
 
 def modulate(x: Tensor, shift: Tensor, scale: Tensor) -> Tensor:
     return x * (1 + scale) + shift
@@ -81,6 +82,29 @@ class ResBlock(nn.Module):
         h = modulate(self.in_ln(x), shift_mlp, scale_mlp)  # (B, N, C)
         h = self.mlp(h)  # (B, N, C)
         return x + gate_mlp * h
+    
+class TwoLayerReLUDenoiser(nn.Module):
+    """SimpleMLPAdaLN の理論解析用ミニマル版:
+       残差・LayerNorm・adaLN なし、条件は concat"""
+    def __init__(self, in_channels, hidden_dim, out_channels,
+                 cond_dim=256, num_classes=15, **kwargs):
+        super().__init__()
+        self.time_embed = TimestepEmbedder.timestep_embedding
+        self.time_embed_size = cond_dim
+
+        self.fc1 = nn.Linear(in_channels + cond_dim, hidden_dim, bias=True)
+        self.fc2 = nn.Linear(hidden_dim, out_channels, bias=False)
+
+    def forward(self, x, t, y=None):
+        b, c, h, w = x.shape
+        x = rearrange(x, 'b c h w -> b (h w) c')              # (B, N, C)
+
+        cond = self.time_embed(t, self.time_embed_size)          # (B, D)
+        cond = cond.unsqueeze(1).expand(-1, x.shape[1], -1)    # (B, N, D)
+
+        z = torch.cat([x, cond], dim=-1)                       # (B, N, C+D)
+        out = self.fc2(F.relu(self.fc1(z)))                    # 2層ReLU本体
+        return rearrange(out, 'b (h w) c -> b c h w', h=h, w=w)
 
 class FinalLayer(nn.Module):
     def __init__(self, model_channels, out_channels):
@@ -229,128 +253,3 @@ class SimpleMLPAdaLN(nn.Module):
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=1)
-
-
-SAFE_EPS = 1e-6
-
-class TimestepEmbedderSN(nn.Module):
-    def __init__(self, hidden_size, frequency_embed_size=256, n_power=1):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.frequency_embed_size = frequency_embed_size
-        self.mlp = nn.Sequential(
-            spectral_norm(nn.Linear(frequency_embed_size, hidden_size, bias=True), eps=SAFE_EPS, n_power_iterations=n_power),
-            nn.Tanh(),
-            spectral_norm(nn.Linear(hidden_size, hidden_size, bias=True), eps=SAFE_EPS, n_power_iterations=n_power),
-        )
-    
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        half = dim // 2
-        freqs = torch.exp(
-            -1 * math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
-        ).to(t.device)
-        args = t.unsqueeze(-1).float() * freqs.unsqueeze(0)
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding
-    
-    def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embed_size)
-        return self.mlp(t_freq)
-
-
-class ResBlockSN(nn.Module):
-    def __init__(self, channels: int, n_power: int = 1):
-        super().__init__()
-        self.channels = channels
-        self.in_ln = nn.LayerNorm(channels, eps=SAFE_EPS)
-        self.mlp = nn.Sequential(
-            spectral_norm(nn.Linear(channels, channels, bias=True), eps=SAFE_EPS, n_power_iterations=n_power),
-            nn.Tanh(),
-            spectral_norm(nn.Linear(channels, channels, bias=True), eps=SAFE_EPS, n_power_iterations=n_power)
-        )
-        self.ada_modulation = nn.Sequential(
-            nn.Tanh(),
-            spectral_norm(nn.Linear(channels, channels, bias=True), eps=SAFE_EPS, n_power_iterations=n_power)
-        )
-    
-    def forward(self, x, y):
-        shift = self.ada_modulation(y)
-        h = self.in_ln(x) + shift
-        h = self.mlp(h)
-        return x + h
-
-
-class FinalLayerSN(nn.Module):
-    def __init__(self, model_channels, out_channels, n_power: int = 1):
-        super().__init__()
-        self.norm_final = nn.LayerNorm(model_channels, elementwise_affine=True, eps=SAFE_EPS)
-        self.linear = spectral_norm(nn.Linear(model_channels, out_channels, bias=True), eps=SAFE_EPS, n_power_iterations=n_power)
-        self.ada_modulation = nn.Sequential(
-            nn.Tanh(),
-            spectral_norm(nn.Linear(model_channels, model_channels, bias=True), eps=SAFE_EPS, n_power_iterations=n_power)
-        )
-    
-    def forward(self, x, c):
-        shift = self.ada_modulation(c)
-        x = self.norm_final(x) + shift
-        return self.linear(x)
-
-
-class SimpleMLPAdaLN_SN(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,   
-        model_channels: int,
-        out_channels: int,
-        z_channels: int,
-        num_blocks: int,
-        grad_checkpoint: bool = False,
-        n_power: int = 1
-    ):
-        super().__init__()
-        self.in_channels = in_channels
-        self.model_channels = model_channels
-        self.out_channels = out_channels
-        self.z_channels = z_channels
-        self.num_blocks = num_blocks
-        self.grad_checkpoint = grad_checkpoint
-        
-        self.input_proj = spectral_norm(nn.Linear(in_channels, model_channels, bias=True), eps=SAFE_EPS, n_power_iterations=n_power)
-        self.time_embed = TimestepEmbedderSN(model_channels)
-        self.cond_embed = spectral_norm(nn.Linear(z_channels, model_channels, bias=False), eps=SAFE_EPS, n_power_iterations=n_power)
-        
-        self.res_blocks = nn.ModuleList([ResBlockSN(model_channels, n_power=n_power) for _ in range(num_blocks)])
-        self.final_layer = FinalLayerSN(model_channels, out_channels, n_power=n_power)
-        
-        self.initialize_weights()
-    
-    def initialize_weights(self):
-        # Initialize weights with a standard method.
-        # Let spectral norm handle the scaling.
-        def _basic_init(m):
-            if isinstance(m, nn.Linear):
-                # The 'weight' attribute is moved to 'weight_orig' by the SN wrapper
-                target_weight = getattr(m, 'weight_orig', m.weight)
-                nn.init.xavier_uniform_(target_weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-        self.apply(_basic_init)
-        
-    def forward(self, x, t, y=None, **kwargs):
-        x = self.input_proj(x)
-        t = self.time_embed(t)
-        
-        c = t + self.cond_embed(y) if y is not None else t
-            
-        if self.grad_checkpoint and not torch.jit.is_scripting():
-            for block in self.res_blocks:
-                x = torch.utils.checkpoint.checkpoint(block, x, c, use_reentrant=False)
-        else:
-            for block in self.res_blocks:
-                x = block(x, c)
-        
-        x = self.final_layer(x, c)
-        return x

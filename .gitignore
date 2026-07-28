@@ -1,8 +1,9 @@
 data
-wandb/
-logs/
-vis/
+wandb
+logs
+vis
 batch_train.sh.*
+vae_kl16.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

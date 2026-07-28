@@ -9,6 +9,10 @@ from .mpdd import MPDD, MPDD_CLASSES
 from .realiad import RealIAD, REALIAD_CLASSES
 from .mulsenad import MULSENAD, MULSEN_CLASSES
 from .viaduct import VIADUCT, VIADUCT_CLASSES
+from .bmad import BMAD, BMAD_CLASSES
+from .mvtec_ad2 import MVTecADT, ADT_CLASSES
+from .tcad import TCAD, TCAD_CLASSES
+from .mvtec_loco import MVTecLOCO, LOCO_CLASSES
 
 import logging
 logger = logging.getLogger(__name__)
@@ -59,6 +63,24 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
     elif dataset_name == 'realiad':
         return ConcatDataset([RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'mulsenad':
+        return ConcatDataset([MULSENAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'viaduct':
+        return ConcatDataset([VIADUCT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'bmad':
+        return ConcatDataset([BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'mvtec_ad_2':
+        return ConcatDataset([MVTecADT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'tcad':
+        return ConcatDataset([TCAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'mvtec_loco':
+        return ConcatDataset([MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_all':
         dss = []
         for cat in AD_CLASSES:
@@ -99,6 +121,34 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
         for cat in VIADUCT_CLASSES:
             kwargs['category'] = cat
             dss.append(VIADUCT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
+    elif dataset_name == 'bmad_all':
+        dss = []
+        for cat in BMAD_CLASSES:
+            kwargs['category'] = cat
+            dss.append(BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
+    elif dataset_name == 'mvtec_ad_2_all':
+        dss = []
+        for cat in ADT_CLASSES:
+            kwargs['category'] = cat
+            dss.append(MVTecADT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
+    elif dataset_name == 'tcad_all':
+        dss = []
+        for cat in TCAD_CLASSES:
+            kwargs['category'] = cat
+            dss.append(TCAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return ConcatDataset(dss)
+    elif dataset_name == 'mvtec_loco_all':
+        dss = []
+        for cat in LOCO_CLASSES:
+            kwargs['category'] = cat
+            dss.append(MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
         return ConcatDataset(dss)
     else:
