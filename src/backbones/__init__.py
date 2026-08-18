@@ -30,6 +30,20 @@ class VAEWrapper(nn.Module):
         out = self.model.encode(x)  
         return out
 
+class MAEWrapper(nn.Module):
+    def __init__(self, model, out_block=-1, patch_size=16):
+        super(MAEWrapper, self).__init__()
+        self.model = model
+        self.out_block = out_block
+        self.patch_size = patch_size
+    
+    def forward(self, x):
+        out = self.model(pixel_values=x, output_hidden_states=True)
+        feat = out.hidden_states[self.out_block][:, 1:, :].permute(0, 2, 1)  # (B, num_patches, hidden_dim) -> (B, hidden_dim, num_patches), no CLS
+        h = w = int(feat.shape[2] ** 0.5)  # Assuming square input, calculate height and width of the feature map
+        feat_2d = feat.reshape(feat.shape[0], feat.shape[1], h, w)  # Reshape to (B, hidden_dim, H, W)
+        return feat_2d, [feat_2d]  # Return the output and a list of features (single feature in this case)
+
 class SiglipWrapper(nn.Module):
     def __init__(self, model, out_block=-1, patch_size=16):
         self.out_block = out_block
@@ -133,6 +147,8 @@ def get_backbone_feature_shape(model_name):
         return (768, 14, 14)
     elif model_name == "google/siglip2-base-patch16-224":
         return (768, 14, 14)
+    elif model_name == "facebook/vit-mae-base":
+        return (768, 14, 14)
     elif model_name == "pdn_small":
         return (384, 16, 16)
     elif model_name == "pdn_medium":
@@ -230,6 +246,12 @@ def get_siglip(model_name, **kwargs):
     ).eval()
     return model
 
+def get_mae(model_name, **kwargs):
+    from transformers import ViTMAEModel
+    model = ViTMAEModel.from_pretrained(model_name).eval()
+    model.config.mask_ratio = 0.0
+    return model
+
 def get_backbone_model(model_name):
     if model_name == "vgg19":
         return models.vgg19(weights=VGG19_Weights.DEFAULT)
@@ -271,6 +293,9 @@ def get_backbone(**kwargs):
     elif 'siglip' in model_name:
         net = get_siglip(**kwargs)
         return SiglipWrapper(net, out_block=kwargs.get('out_block', -1))
+    elif 'mae' in model_name:
+        net = get_mae(**kwargs)
+        return MAEWrapper(net, out_block=kwargs.get('out_block', -1))
     elif 'vgg' in model_name:
         return BackboneModel(model_name, [3, 8, 17, 26])
     elif 'pixel' in model_name:
