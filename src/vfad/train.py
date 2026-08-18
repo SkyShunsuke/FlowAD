@@ -145,14 +145,9 @@ def main(params, args):
                 f"Number of test samples: {len(test_dataset)}, "
                 f"Iterations per epoch: {ipe}")
     
-    # build model
-    # feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
-    # fe = get_backbone(**params['model']['backbone'])
-    # from src.backbones import md3mu_backbone
-    # fe = md3mu_backbone()
-    from src.backbones.vae import create_vae
-    fe = create_vae(**params['model']['backbone'])
-    feat_sz = (16, 16, 16)
+    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
+    fe = get_backbone(**params['model']['backbone'])
+    feat_norm_method = params['model']['backbone'].get('normalization', None)
     
     feat_norm_method = params['model']['backbone'].get('normalization', None)
     norm_fn = get_normalization_func(feat_norm_method)
@@ -281,7 +276,7 @@ def main(params, args):
         imgs, labels = batch["img"], batch["clslabel"]
         pathid = batch["path"]
         with torch.no_grad():
-            z1 = fe.encode(imgs.to(device)).sample().mul_(0.18215)
+            z1, _ = fe(imgs.to(device))  # (B, c, h, w)
         
         for i in range(len(labels)):
             path = pathid[i]

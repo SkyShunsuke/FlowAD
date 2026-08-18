@@ -444,6 +444,10 @@ class DiagonalGaussianDistribution(object):
 
     def mode(self):
         return self.mean
+    
+    def mean_std(self):
+        return self.mean, self.std
+    
 
 class AutoencoderKL(nn.Module):
     def __init__(self, embed_dim, ch_mult, use_variational=True, ckpt_path=None):

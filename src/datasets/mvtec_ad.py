@@ -93,6 +93,7 @@ class MVTecAD(Dataset):
         inputs["clsname"] = cls_name
         inputs["clslabel"] = AD_CLASSES.index(cls_name)
         inputs["path"] = str(img_file)
+        inputs["index"] = index
         
         sample = self.custom_transforms(img)
         

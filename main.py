@@ -14,7 +14,7 @@ def parse_args():
         type=str,
         default="train",
         required=True,
-        choices=["train", "eval"],
+        choices=["train", "eval", "analyze"],
     )
     
     ### Loaded from torchrun
@@ -42,7 +42,6 @@ def main(params, args):
         framework = params['meta']['name']
         if framework == "vfad":
             from src.vfad.train import main as vfad_train
-            # from src.vfad.train_point import main as vfad_train
             vfad_train(params, args)
         else:
             raise NotImplementedError(f"Pretraining for framework {framework} is not implemented.")
@@ -50,8 +49,12 @@ def main(params, args):
         framework = params['meta']['name']
         if framework == "vfad":
             from src.vfad.eval import main as vfad_eval
-            # from src.vfad.eval_point import main as vfad_eval
             vfad_eval(params, args)
+    elif task == "analyze":
+        framework = params['meta']['name']
+        if framework == "vfad":
+            from src.vfad.analyze import main as vfad_analyze
+            vfad_analyze(params, args)
     else:
         raise ValueError(f"Unknown task: {task}")
 

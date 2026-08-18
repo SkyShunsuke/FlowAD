@@ -26,7 +26,7 @@ flow_matching:
   train_steps: -1
 model:
   backbone: 
-    model_name: vae
+    model_name: vae-kl16
     pretrained: true
     normalization: null
   model_name: mlp
@@ -42,9 +42,9 @@ model:
   learn_sigma: False
   t_scale: 1000
 resume:
-  resume_path: ./logs/ad_mc_mlp_vae_diffusion_1/checkpoints/ckpt_epoch_300.pth
+  resume_path: ./logs/ad_mc_mlp_vae/checkpoints/ckpt_epoch_300.pth
 logging:
-  log_dir: logs/ad_mc_mlp_vae_diffusion_1/
+  log_dir: logs/ad_mc_mlp_vae/
   eval:
     eval_strategy: recon  # options: 'density', 'recon', 'inversion'
     exact_divergence: False
@@ -66,7 +66,7 @@ logging:
       - px_ap
       - px_f1max
       - px_aupro
-    save_dir: ./logs/ad_mc_mlp_vae_diffusion_1/reconstruction/
+    save_dir: ./logs/ad_mc_mlp_vae/reconstruction/
 
     
 

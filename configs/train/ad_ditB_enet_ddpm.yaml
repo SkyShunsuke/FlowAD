@@ -1,0 +1,110 @@
+data:
+  category: all
+  data_root: data/mvtec_ad
+  dataset_name: mvtec_ad_all
+  img_size: 256
+  num_workers: 8
+  persistent_workers: false
+  pin_memory: true
+  test_batch_size: 8
+  train_batch_size: 8
+  transform_type: imagenet
+flow_matching:
+  loss_type: noise
+  pred_type: noise
+  scheduler:
+    name: vp
+    t_mu: -0.8
+    t_scheduler_infer: linear
+    t_scheduler_train: linear
+    t_sigma: 0.8
+    params:
+      beta_min: 0.1
+      beta_max: 20.0
+  solver:
+    name: euler
+  train_steps: -1
+logging:
+  ckpt:
+    ckpt_epoch_freq: 300
+    save_best: false
+    save_latest: false
+  eval:
+    eval_epoch_freq: 500
+    img_score_agg: diff+sum
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+    solver_name: euler
+    steps: 3
+  log_dir: logs/ad_mc_ditB_enet_ddpm_0817/
+  log_stdout: true
+  log_step_freq: 100
+  use_csv: true
+  use_tensorboard: true
+  vis:
+    denorm_type: imagenet
+    num_samples_per_class: 16
+    solver_name: midpoint
+    steps: 50
+    vis_epoch_freq: 500
+  wandb:
+    entity: shuns71
+    project_name: VFAD
+    run_name: ad_mc_ditB_enet_ddpm_0817
+    use_wandb: true
+meta:
+  name: vfad
+model:
+  backbone:
+    model_name: efficientnet-b4
+    normalization: null
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    pretrained: true
+  class_dropout_prob: 0.0
+  cond_channels: 768
+  depth: 12
+  hidden_size: 768
+  learn_sigma: false
+  mlp_ratio: 4.0
+  model_name: dit
+  num_heads: 12
+  patch_size: 1
+  t_scale: 1000
+  use_class_labels: true
+opt:
+  all_gather: false
+  bias_decay: false
+  clip_grad: 1.0
+  epochs: 300
+  fix_lr_strategy: const
+  fix_lr_thres: -1
+  fix_wd_strategy: const
+  fix_wd_thres: -1
+  global_seed: 0
+  ipe_scale: 1.0
+  lr_end: 5.0e-06
+  lr_start: 1.0e-06
+  lr_warmup: 5.0e-05
+  lr_warmup_epochs: 40
+  name: adamw
+  norm_decay: false
+  use_bfloat16: false
+  wd_end: 0.0
+  wd_start: 0.0
+resume:
+  resume_path: null

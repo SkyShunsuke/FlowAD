@@ -1,5 +1,5 @@
 
-
+import torch
 from torchvision import transforms
 from torch.utils.data import ConcatDataset
 
@@ -48,38 +48,44 @@ def build_transforms(img_size, transform_type):
         ])
     else:
         raise ValueError(f"Invalid transform: {transform_type}")
+    
+class GlobalIndexConcatDataset(torch.utils.data.ConcatDataset):
+    def __getitem__(self, idx):
+        item = super().__getitem__(idx)
+        item["index"] = idx  
+        return item
 
 def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: int, transform_type: str, **kwargs):
     logger.info(f"Building dataset: {dataset_name}, train: {train}, img_size: {img_size}, transform: {transform_type}")
     if dataset_name == 'mvtec_ad':
-        return ConcatDataset([MVTecAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([MVTecAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'visa':
-        return ConcatDataset([VisA(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([VisA(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, **kwargs)])
     elif dataset_name == 'mpdd':
-        return ConcatDataset([MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'realiad':
-        return ConcatDataset([RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mulsenad':
-        return ConcatDataset([MULSENAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([MULSENAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'viaduct':
-        return ConcatDataset([VIADUCT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([VIADUCT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'bmad':
-        return ConcatDataset([BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_2':
-        return ConcatDataset([MVTecADT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([MVTecADT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'tcad':
-        return ConcatDataset([TCAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([TCAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_loco':
-        return ConcatDataset([MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        return GlobalIndexConcatDataset([MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_all':
         dss = []
@@ -87,69 +93,69 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
             kwargs['category'] = cat
             dss.append(MVTecAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'visa_all':
         dss = []
         for cat in VISA_CLASSES:
             kwargs['category'] = cat
             dss.append(VisA(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'mulsenad_all':
         dss = []
         for cat in MULSEN_CLASSES:
             kwargs['category'] = cat
             dss.append(MULSENAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'mpdd_all':
         dss = []
         for cat in MPDD_CLASSES:
             kwargs['category'] = cat
             dss.append(MPDD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'realiad_all':
         dss = []
         for cat in REALIAD_CLASSES:
             kwargs['category'] = cat
             dss.append(RealIAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'viaduct_all':
         dss = []
         for cat in VIADUCT_CLASSES:
             kwargs['category'] = cat
             dss.append(VIADUCT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'bmad_all':
         dss = []
         for cat in BMAD_CLASSES:
             kwargs['category'] = cat
             dss.append(BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'mvtec_ad_2_all':
         dss = []
         for cat in ADT_CLASSES:
             kwargs['category'] = cat
             dss.append(MVTecADT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'tcad_all':
         dss = []
         for cat in TCAD_CLASSES:
             kwargs['category'] = cat
             dss.append(TCAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'mvtec_loco_all':
         dss = []
         for cat in LOCO_CLASSES:
             kwargs['category'] = cat
             dss.append(MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
-        return ConcatDataset(dss)
+        return GlobalIndexConcatDataset(dss)
     else:
         raise ValueError(f"Invalid dataset: {dataset_name}")

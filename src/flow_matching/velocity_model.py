@@ -275,6 +275,7 @@ class VelocityField(nn.Module):
             x1 = vf.sample(x0, y, steps=10)  # (batch_size, *input_sz)
             x1_inter = vf.sample(x0, y, steps=10, return_intermediate=True)  # List of intermediate results
         """
+        mu_all = model_kwargs.get('mu_all', torch.zeros(4, 16).to(x0.device)) # (K, C)
         
         # - build solver
         model = WrappedModel(self.model, self.path, self.pred_type, self.div_eps)
@@ -286,16 +287,32 @@ class VelocityField(nn.Module):
         
         v_traj = []
         x_in = x0
+        prev_assign = None
+        assign_flip_counter = None
         for i in range(steps):
             # print(f"Sampling step {i+1}/{steps}...")
             t_in = timesteps[i]
             t_in = t_in.expand(x_in.shape[0])
+            
+            # - compute cluster assignment
+            # x_in_flat = x_in.permute(0, 2, 3, 1).reshape(-1, x_in.shape[-1])  # (N * H * W, C)
+            # scaled_mu_all = mu_all * t_in[0]  # (K, C)
+            # l2_dist = torch.cdist(x_in_flat, scaled_mu_all)  # (N * H * W, K)
+            # cluster_assign = torch.argmin(l2_dist, dim=1).detach().cpu()  # (N * H * W,)
+            # if prev_assign is not None:
+            #     assign_flip = (cluster_assign != prev_assign).float()
+            #     assign_flip_counter += assign_flip
+            # else:
+            #     assign_flip_counter = torch.zeros_like(cluster_assign, dtype=torch.float)
+            #     prev_assign = cluster_assign.clone()
+                
             v_pred = model(x_in, t_in, y=y, **model_kwargs)
             x_in = x_in + v_pred * step_size
             v_traj.append(v_pred)
         if return_intermediate:
             return x_in, v_traj  # List of intermediate results
         samples = x_in
+        # import pdb; pdb.set_trace()
         return samples
     
     def sample_ddim(self, x0, y, steps: int, start_t: float=0.0, **model_kwargs):

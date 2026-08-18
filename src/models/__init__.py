@@ -1,11 +1,10 @@
-from .mlp import SimpleMLPAdaLN, TwoLayerReLUDenoiser
+from .mlp import SimpleMLPAdaLN
 from .unet import UNetModel
 from .dit import DiT
 
 def init_model(model_name, **kwargs):
     model_constructors = {
         'mlp': SimpleMLPAdaLN,
-        'two_layer_mlp': TwoLayerReLUDenoiser,
         'unet_xs': UNET_XS,
         'unet_s': UNET_S,
         'unet_m': UNET_M,

@@ -178,23 +178,55 @@ def main(params, args):
 
     # -- evaluate
     logger.info(f"Starting evaluation...")
-    logger.info(f"Evaluating with reconstruction steps: {i}...")
-    eval_results = eval_func(
-        vf=vf,
-        fe=fe,
-        norm_fn=norm_fn,
-        dataloader=test_loader,
-        device=device,
-        img_sz=(params['data']['img_size'], params['data']['img_size']),
-        verbose=True,
-        use_bfloat16=params['meta']['use_bfloat16'],
-        distributed=args.distributed,
-        save_anomaps=eval_params.get('save_anomaps', False),
-        save_dir=eval_params.get('save_dir', None),
-        eval_params=eval_params,
-        train_loader=train_loader,
-        noise_shape=feat_sz,
-    )
+    ablation_steps = eval_params.get('ablation_steps', [-1])
+    do_ablation = ablation_steps != [-1]
+    
+    if do_ablation:
+        logger.info(f"Performing ablation study with steps: {ablation_steps}")
+        for step in ablation_steps:
+            logger.info(f"Evaluating with {step} steps...")
+            eval_params["recon_steps"] = step
+            eval_results = eval_func(
+                vf=vf,
+                fe=fe,
+                norm_fn=norm_fn,
+                dataloader=test_loader,
+                device=device,
+                img_sz=(params['data']['img_size'], params['data']['img_size']),
+                verbose=True,
+                use_bfloat16=params['meta']['use_bfloat16'],
+                distributed=args.distributed,
+                save_anomaps=eval_params.get('save_anomaps', False),
+                save_dir=eval_params.get('save_dir', None),
+                eval_params=eval_params,
+                train_loader=train_loader,
+                noise_shape=feat_sz,
+            )
+            csv_path = os.path.join(eval_params.get('save_dir', '.'), f'eval_results_{step}.csv')
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+            
+            df = pd.DataFrame.from_dict(eval_results, orient='index')
+            df.index.name = 'category'
+            df.reset_index(inplace=True)
+            df.to_csv(csv_path, index=False)
+            logger.info(f"Saved evaluation results to {csv_path}")
+    else:
+        eval_results = eval_func(
+            vf=vf,
+            fe=fe,
+            norm_fn=norm_fn,
+            dataloader=test_loader,
+            device=device,
+            img_sz=(params['data']['img_size'], params['data']['img_size']),
+            verbose=True,
+            use_bfloat16=params['meta']['use_bfloat16'],
+            distributed=args.distributed,
+            save_anomaps=eval_params.get('save_anomaps', False),
+            save_dir=eval_params.get('save_dir', None),
+            eval_params=eval_params,
+            train_loader=train_loader,
+            noise_shape=feat_sz,
+        )
     
     # -- save results
     if is_main():

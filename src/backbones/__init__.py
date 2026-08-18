@@ -23,12 +23,27 @@ class VAEWrapper(nn.Module):
         self.model = model
         
     def forward(self, x):
-        out = self.model(x).sample().mul_(0.18215)  # Scale the output to match the latent space scaling
+        out = self.model.encode(x).sample().mul_(0.18215)  # Scale the output to match the latent space scaling
         return out, [out]  # Return the output and a list of features (single feature in this case)
     
     def encode(self, x):
         out = self.model.encode(x)  
         return out
+
+class SiglipWrapper(nn.Module):
+    def __init__(self, model, out_block=-1, patch_size=16):
+        self.out_block = out_block
+        self.patch_size = patch_size
+        super(SiglipWrapper, self).__init__()
+        self.model = model
+      
+    def forward(self, x):
+        inputs = {"pixel_values": x}
+        out = self.model(**inputs, output_hidden_states=True)
+        feat = out.hidden_states[self.out_block].permute(0, 2, 1)  # (B, num_patches, hidden_dim) -> (B, hidden_dim, num_patches)
+        h = w = int(feat.shape[2] ** 0.5)  # Assuming square input, calculate height and width of the feature map
+        feat_2d = feat.reshape(feat.shape[0], feat.shape[1], h, w)  # Reshape to (B, hidden_dim, H, W)
+        return feat_2d, [feat_2d]  # Return the output and a list of features (single feature in this case)
 
 class DINOWrapper(nn.Module):
     def __init__(self, model, out_blocks=None, out_res=None, **kwargs):
@@ -115,6 +130,8 @@ def get_backbone_feature_shape(model_name):
     elif model_name == "dinov1-small":
         return (384, 14, 14)
     elif model_name == "dinov1-base":
+        return (768, 14, 14)
+    elif model_name == "google/siglip2-base-patch16-224":
         return (768, 14, 14)
     elif model_name == "pdn_small":
         return (384, 16, 16)
@@ -204,6 +221,15 @@ def get_pdn_medium(out_channels=384, padding=False, **kwargs):
                   kernel_size=1)
     )
 
+def get_siglip(model_name, **kwargs):
+    from transformers import SiglipVisionModel
+    model = SiglipVisionModel.from_pretrained(
+        model_name,
+        torch_dtype=torch.bfloat16,
+        attn_implementation="sdpa",   # 対応環境ならflash_attention_2でも可
+    ).eval()
+    return model
+
 def get_backbone_model(model_name):
     if model_name == "vgg19":
         return models.vgg19(weights=VGG19_Weights.DEFAULT)
@@ -242,6 +268,9 @@ def get_backbone(**kwargs):
     elif 'dinov2' in model_name:
         net = get_dino(model_name, **kwargs)
         return net
+    elif 'siglip' in model_name:
+        net = get_siglip(**kwargs)
+        return SiglipWrapper(net, out_block=kwargs.get('out_block', -1))
     elif 'vgg' in model_name:
         return BackboneModel(model_name, [3, 8, 17, 26])
     elif 'pixel' in model_name:
@@ -366,19 +395,41 @@ class BackboneWrapper(nn.Module):
         return concat_y, y
         
 if __name__ == "__main__":
-    model_kwargs = {
-        'model_type': 'wide_resnet50_2',
-        'outblocks': (1, 5, 9, 21),
-        'outstrides': (2, 4, 8, 16),
-        'pretrained': True,
-        'stride': 16
-    }
-    model = get_backbone(**model_kwargs).to('cuda')
-    x = torch.randn(1, 3, 256, 256).to('cuda')
+    # model_kwargs = {
+    #     'model_type': 'wide_resnet50_2',
+    #     'outblocks': (1, 5, 9, 21),
+    #     'outstrides': (2, 4, 8, 16),
+    #     'pretrained': True,
+    #     'stride': 16
+    # }
+    # model = get_backbone(**model_kwargs).to('cuda')
+    # x = torch.randn(1, 3, 256, 256).to('cuda')
+    # with torch.no_grad():
+    #     features, y = model(x)
+    # print(features[0].shape)
+    # print(f"Sublevel features: {len(y)}")
+    # print(len(y))
+    # for i in range(len(y)):
+    #     print(y[i].shape)
+    import torch
+    from transformers import SiglipVisionModel, SiglipImageProcessor
+
+    model_id = "google/siglip-so400m-patch14-384"
+    processor = SiglipImageProcessor.from_pretrained(model_id)
+    model = SiglipVisionModel.from_pretrained(model_id).eval()
+
+    inputs = processor(images=image, return_tensors="pt")
+
     with torch.no_grad():
-        features, y = model(x)
-    print(features[0].shape)
-    print(f"Sublevel features: {len(y)}")
-    print(len(y))
-    for i in range(len(y)):
-        print(y[i].shape)
+        out = model(**inputs, output_hidden_states=True)
+
+    # out.hidden_states は tuple:
+    #   [0] = embedding層の出力(パッチ埋め込み+位置埋め込み)
+    #   [1]〜[N] = 各Transformerブロックの出力
+    # 各要素の形状: (B, num_patches, hidden_dim)
+    feat = out.hidden_states[-4]  # 例: 後ろから4層目
+
+    # 密な予測タスク用に2Dグリッドへ戻す場合
+    B, L, D = feat.shape
+    h = w = int(L ** 0.5)  # 384px / patch14 → 27x27 = 729
+    feat_2d = feat.permute(0, 2, 1).reshape(B, D, h, w)

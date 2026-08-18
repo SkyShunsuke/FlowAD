@@ -91,16 +91,16 @@ def evaluate_recon(
     print("▶️Closed-form velocity fields constructed for each class.")
     
     logger.info("Extracting features and computing anomaly scores...")
-    noise = torch.randn((1, *feat_sz), device=device)
+    noise = torch.randn((1, *noise_shape), device=device)
     perturb_t = torch.tensor([inv_stop_time], device=device)
     for step, batch in tqdm(enumerate(dataloader), total=len(dataloader), disable=not verbose):
-        current_idx = step * dataloader.batch_size * get_world_size()
         
         # -- prepare data
         imgs_local, clslabels_local = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
         imgs_local, clslabels_local = imgs_local.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True)
         anom_labels_local, anom_masks_local = batch['label'], batch['mask'] # (B,), (B, H, W)
         anom_labels_local, anom_masks_local = anom_labels_local.to(device, non_blocking=True), anom_masks_local.to(device, non_blocking=True)
+        idx_local = batch["index"].to(device, non_blocking=True)  # (B,)
         
         # -- extract features
         z1, _ = extract_features(fe, imgs_local, device)  # (B, c, h, w)
@@ -112,17 +112,14 @@ def evaluate_recon(
         # -- reconstruction through the velocity field
         if use_bfloat16:
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+                pass
                 z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
         else:
             z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, start_t=inv_stop_time)
-        
-        # reconstruct images from features for visualization
-        recon_imgs_local = fe.decode(z1_local / 0.18215) # (B, C, H, W)
-
+            # z1_local = vf.sample_ddim(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
         # -- compute reconstruction error as anomaly score
         mse_local = F.mse_loss(z1_local, z1, reduction='none').sum(dim=1)  # (B, h, w)
         imgs_local = denormalize_image(imgs_local) * 255.0
-        recon_imgs_local = denormalize_image(recon_imgs_local) * 255.0
         
         # -- share results across GPUs
         if distributed:
@@ -131,14 +128,14 @@ def evaluate_recon(
             cls_labels = concat_all_gather(clslabels_local)
             anom_masks = concat_all_gather(anom_masks_local)
             imgs = concat_all_gather(imgs_local)
-            recon_imgs = concat_all_gather(recon_imgs_local)
+            idx = concat_all_gather(idx_local)
         else:
             mse = mse_local
             anom_labels = anom_labels_local
             cls_labels = clslabels_local
             anom_masks = anom_masks_local
             imgs = imgs_local
-            recon_imgs = recon_imgs_local
+            idx = idx_local
         
         # -- compute anomaly scores
         mse = F.interpolate(
@@ -153,11 +150,14 @@ def evaluate_recon(
         ).squeeze(1).long()  # (N, H, W)
         
         # -- store results
-        bs = mse.shape[0]
-        mse_all[current_idx: current_idx + bs] = mse_np
-        clslabels_all[current_idx: current_idx + bs] = cls_labels.cpu().numpy().astype(np.uint8)
-        masks_all[current_idx: current_idx + bs] = anom_masks.cpu().numpy().astype(np.uint8)
-        anom_labels_all[current_idx: current_idx + bs] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
+        idx_np = idx.cpu().numpy()
+        mse_all[idx_np] = mse_np
+        clslabels_all[idx_np] = cls_labels.cpu().numpy().astype(np.uint8)
+        masks_all[idx_np] = anom_masks.cpu().numpy().astype(np.uint8)
+        anom_labels_all[idx_np] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
+    
+    if distributed:
+        torch.distributed.barrier()
     
     # -- compute anomaly scores
     px_scores = mse_all  # (N, H, W)
@@ -249,6 +249,12 @@ def evaluate_recon(
         cls_px_scores = px_scores_by_class[cls_label]
         cls_px_gts = px_gts_by_class[cls_label]  # (N_cls, H, W)
         # cls_latents = latents_by_class[cls_label]  # (N_cls, c, h, w)
+        # cls_anom_px_scores = cls_px_scores[cls_px_gts > 0.5]  # (N_anom_px,)
+        # cls_normal_px_scores = cls_px_scores[cls_px_gts < 0.5]  # (N_normal_px,)
+        # cls_anom_scores_mean = cls_anom_px_scores.mean() if len(cls_anom_px_scores) > 0 else 0.0
+        # cls_normal_gts_mean = cls_normal_px_scores.mean() if len(cls_normal_px_scores) > 0 else 0.0
+        # logger.info(f"Class {clsname_map[cls_label]}: Anomalous pixel scores mean: {cls_anom_scores_mean:.4f}, Normal pixel scores mean: {cls_normal_gts_mean:.4f}")
+        
         cls_px_metrics = {
             k: float(v)
             for k, v in calculate_px_metrics(

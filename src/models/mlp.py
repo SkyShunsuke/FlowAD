@@ -82,29 +82,6 @@ class ResBlock(nn.Module):
         h = modulate(self.in_ln(x), shift_mlp, scale_mlp)  # (B, N, C)
         h = self.mlp(h)  # (B, N, C)
         return x + gate_mlp * h
-    
-class TwoLayerReLUDenoiser(nn.Module):
-    """SimpleMLPAdaLN の理論解析用ミニマル版:
-       残差・LayerNorm・adaLN なし、条件は concat"""
-    def __init__(self, in_channels, hidden_dim, out_channels,
-                 cond_dim=256, num_classes=15, **kwargs):
-        super().__init__()
-        self.time_embed = TimestepEmbedder.timestep_embedding
-        self.time_embed_size = cond_dim
-
-        self.fc1 = nn.Linear(in_channels + cond_dim, hidden_dim, bias=True)
-        self.fc2 = nn.Linear(hidden_dim, out_channels, bias=False)
-
-    def forward(self, x, t, y=None):
-        b, c, h, w = x.shape
-        x = rearrange(x, 'b c h w -> b (h w) c')              # (B, N, C)
-
-        cond = self.time_embed(t, self.time_embed_size)          # (B, D)
-        cond = cond.unsqueeze(1).expand(-1, x.shape[1], -1)    # (B, N, D)
-
-        z = torch.cat([x, cond], dim=-1)                       # (B, N, C+D)
-        out = self.fc2(F.relu(self.fc1(z)))                    # 2層ReLU本体
-        return rearrange(out, 'b (h w) c -> b c h w', h=h, w=w)
 
 class FinalLayer(nn.Module):
     def __init__(self, model_channels, out_channels):

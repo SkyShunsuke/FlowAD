@@ -4,4 +4,4 @@ torchrun \
   --standalone \
   --nnodes=1 \
   --nproc-per-node=8 \
-  main.py --config_file ./configs/train/ad_two_layer_mlp_vae.yaml --task train
+  main.py --config_file ./configs/train/ad_ditB_siglip.yaml --task train
