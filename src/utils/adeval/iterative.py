@@ -6,7 +6,7 @@ import cv2
 NDArr = np.ndarray
 Elements = Union[NDArr, Real, List[NDArr], List[Real]]
 
-from .mem_effic import _AccumulateStatCurve, _pro_weight, _trapezoid_intep
+from .mem_effic import _AccumulateStatCurve, _pro_weight, _trapz_intep
 
 
 class EvalAccumulator:
@@ -126,12 +126,12 @@ class EvalAccumulator:
     @staticmethod
     def _auroc(acc: _AccumulateStatCurve) -> float:
         fpr, tpr, _ = acc.roc()
-        return float(np.trapezoid(tpr[::-1], fpr[::-1], axis=0))
+        return float(np.trapz(tpr[::-1], fpr[::-1], axis=0))
 
     @staticmethod
     def _aupr(acc: _AccumulateStatCurve) -> float:
         recall, precision, _ = acc.pr()
-        return float(np.trapezoid(precision[::-1], recall[::-1], axis=0))
+        return float(np.trapz(precision[::-1], recall[::-1], axis=0))
 
     def _aupro(self) -> float:
         if not self._has_pro:
@@ -142,11 +142,11 @@ class EvalAccumulator:
         mask = fpr <= LIMIT
         lo_pro, lo_fpr = pro[mask][::-1], fpr[mask][::-1]
         hi_pro, hi_fpr = pro[~mask][::-1], fpr[~mask][::-1]
-        lo = float(np.trapezoid(lo_pro, lo_fpr, axis=0))
-        hi = float(np.trapezoid(hi_pro, hi_fpr, axis=0))
-        tot = float(np.trapezoid(pro[::-1], fpr[::-1], axis=0))
+        lo = float(np.trapz(lo_pro, lo_fpr, axis=0))
+        hi = float(np.trapz(hi_pro, hi_fpr, axis=0))
+        tot = float(np.trapz(pro[::-1], fpr[::-1], axis=0))
 
-        return (lo + _trapezoid_intep(
+        return (lo + _trapz_intep(
             (LIMIT - lo_fpr[-1]) / (hi_fpr[0] - lo_fpr[-1]),
             tot - (lo + hi), lo_pro[-1], hi_pro[0]
         )) / LIMIT
@@ -173,7 +173,7 @@ class EvalAccumulator:
     #     hi = float(np.trapz(hi_pro, hi_fpr, axis=0))
     #     tot = float(np.trapz(pro[::-1], fpr[::-1], axis=0))
 
-    #     return (lo + _trapezoid_intep(
+    #     return (lo + _trapz_intep(
     #         (LIMIT - lo_fpr[-1]) / (hi_fpr[0] - lo_fpr[-1]),
     #         tot - (lo + hi), lo_pro[-1], hi_pro[0]
     #     )) / LIMIT

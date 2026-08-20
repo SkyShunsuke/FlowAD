@@ -277,12 +277,22 @@ def main(params, args):
         pathid = batch["path"]
         with torch.no_grad():
             z1, _ = fe(imgs.to(device))  # (B, c, h, w)
+            z1 = norm_fn(z1)
         
         for i in range(len(labels)):
             path = pathid[i]
             latent = z1[i].detach().cpu()
             all_latents[path] = latent
     logger.info(f"Extracted latents for all training samples. Total: {len(all_latents)}")
+    
+    # compute sigma data for latents
+    # sigma_data := sqrt(E[(z - E[z])^2]) for z in latents
+    # latent_stack = torch.stack(list(all_latents.values()), dim=0)  # (N, C, H, W)
+    # latent_mean = latent_stack.mean(dim=0, keepdim=True)  # (1, C, H, W)
+    # latent_var = ((latent_stack - latent_mean) ** 2).mean(dim=0, keepdim=True)  # (1, C, H, W)
+    # sigma_data = torch.sqrt(latent_var).squeeze().cpu().numpy()  # (C, H, W)
+    # sigma_data = sigma_data.mean()  # scalar
+    # logger.info(f"Computed sigma_data for latents: {sigma_data:.6f}")
     
     for epoch in range(start_epoch, num_epochs + 1):
         logger.info(f"Starting epoch {epoch}/{num_epochs}")

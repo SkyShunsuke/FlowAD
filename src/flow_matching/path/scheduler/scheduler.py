@@ -198,6 +198,125 @@ class CosineScheduler(Scheduler):
     def snr_inverse(self, snr: Tensor) -> Tensor:
         return 2.0 * torch.atan(snr) / torch.pi
 
+
+class EDMScheduler(Scheduler):
+    r"""EDM's unscaled perturbation path, parameterized directly by noise level.
+
+    The independent variable supplied as ``t`` is the EDM noise standard
+    deviation :math:`\sigma` rather than a normalized time in ``[0, 1]``.  In
+    the notation of :class:`AffineProbPath`,
+
+    .. math::
+
+        X_\sigma = X_1 + \sigma X_0,
+
+    so ``alpha_t = 1``, ``sigma_t = t``, and differentiation is with respect
+    to :math:`\sigma`.  Consequently, converting an :math:`x_1` prediction to
+    velocity gives exactly EDM's probability-flow direction
+
+    .. math::
+
+        \frac{dX}{d\sigma} = \frac{X-D_\theta(X,\sigma)}{\sigma}.
+
+    The remaining constructor arguments are stored here so that the existing
+    ``VelocityField`` configuration plumbing can carry EDM training and
+    sampling hyperparameters without introducing another configuration block.
+    """
+
+    def __init__(
+        self,
+        P_mean: float = -1.2,
+        P_std: float = 1.2,
+        sigma_data: float = 0.5,
+        sigma_min: float = 0.002,
+        sigma_max: float = 80.0,
+        rho: float = 7.0,
+        S_churn: float = 0.0,
+        S_min: float = 0.0,
+        S_max: float = float("inf"),
+        S_noise: float = 1.0,
+    ) -> None:
+        if P_std <= 0:
+            raise ValueError(f"P_std must be positive, got {P_std}.")
+        if sigma_data <= 0:
+            raise ValueError(f"sigma_data must be positive, got {sigma_data}.")
+        if not 0 < sigma_min < sigma_max:
+            raise ValueError(
+                f"Expected 0 < sigma_min < sigma_max, got {sigma_min}, {sigma_max}."
+            )
+        if rho <= 0:
+            raise ValueError(f"rho must be positive, got {rho}.")
+
+        self.P_mean = float(P_mean)
+        self.P_std = float(P_std)
+        self.sigma_data = float(sigma_data)
+        self.sigma_min = float(sigma_min)
+        self.sigma_max = float(sigma_max)
+        self.rho = float(rho)
+        self.S_churn = float(S_churn)
+        self.S_min = float(S_min)
+        self.S_max = float(S_max)
+        self.S_noise = float(S_noise)
+
+    def __call__(self, t: Tensor) -> SchedulerOutput:
+        return SchedulerOutput(
+            alpha_t=torch.ones_like(t),
+            sigma_t=t,
+            d_alpha_t=torch.zeros_like(t),
+            d_sigma_t=torch.ones_like(t),
+        )
+
+    def snr_inverse(self, snr: Tensor) -> Tensor:
+        # alpha / sigma = 1 / sigma for the EDM path.
+        return torch.reciprocal(snr)
+
+    def sample_train_sigma(
+        self,
+        batch_size: int,
+        *,
+        device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float32,
+    ) -> Tensor:
+        """Draw the log-normal noise levels used by the EDM training loss."""
+        rnd_normal = torch.randn(batch_size, device=device, dtype=dtype)
+        return torch.exp(rnd_normal * self.P_std + self.P_mean)
+
+    def time_grid(
+        self,
+        n_sampling_steps: int,
+        *,
+        device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float64,
+        sigma_min: Optional[float] = None,
+        sigma_max: Optional[float] = None,
+        rho: Optional[float] = None,
+        append_zero: bool = True,
+    ) -> Tensor:
+        """Return the power-law noise grid from EDM Algorithm 2."""
+        if n_sampling_steps < 2:
+            raise ValueError(
+                f"EDM sampling requires at least two steps, got {n_sampling_steps}."
+            )
+        sigma_min = self.sigma_min if sigma_min is None else float(sigma_min)
+        sigma_max = self.sigma_max if sigma_max is None else float(sigma_max)
+        rho = self.rho if rho is None else float(rho)
+        if not 0 < sigma_min < sigma_max:
+            raise ValueError(
+                f"Expected 0 < sigma_min < sigma_max, got {sigma_min}, {sigma_max}."
+            )
+        if rho <= 0:
+            raise ValueError(f"rho must be positive, got {rho}.")
+
+        indices = torch.arange(n_sampling_steps, device=device, dtype=dtype)
+        ramp = indices / (n_sampling_steps - 1)
+        sigma_steps = (
+            sigma_max ** (1.0 / rho)
+            + ramp * (sigma_min ** (1.0 / rho) - sigma_max ** (1.0 / rho))
+        ) ** rho
+        if append_zero:
+            sigma_steps = torch.cat([sigma_steps, torch.zeros_like(sigma_steps[:1])])
+        return sigma_steps
+
 class DiscreteVPScheduler(Scheduler):
     def __init__(
         self,
@@ -228,22 +347,17 @@ class DiscreteVPScheduler(Scheduler):
     def time_grid(
         self, n_sampling_steps: int, device=None, dtype: torch.dtype = torch.float32
     ) -> Tensor:
-        """DDIM 用の昇順 FM 時刻グリッド (長さ n_sampling_steps+1, 表の行に厳密に乗る).
-
-        n_sampling_steps が n_steps を割り切ると等間隔の部分列になる.
-        """
         s = torch.linspace(self.n_steps, 0, n_sampling_steps + 1).round()
         return (1.0 - s / self.n_steps).to(device=device, dtype=dtype)
 
-    # ------------------------------------------------------------------ Scheduler API
     def __call__(self, t: Tensor) -> SchedulerOutput:
         lambdas = self._lambdas.to(t.device)
         dlambda = self._dlambda.to(t.device)
         n = self.n_steps
 
-        s = (1.0 - t.to(torch.float64)) * n            # DDPM 時刻 (連続), 0..N
-        k = s.floor().clamp(0, n - 1).long()           # 区間 [k, k+1)
-        lam = lambdas[k] + (s - k) * dlambda[k]        # Λ(s): 区分線形
+        s = (1.0 - t.to(torch.float64)) * n          
+        k = s.floor().clamp(0, n - 1).long()           
+        lam = lambdas[k] + (s - k) * dlambda[k]        
         dlam_dt = -n * dlambda[k]                      # dΛ/dt = (dΛ/ds)(ds/dt), ds/dt = -N
 
         exp_neg = torch.exp(-lam)
@@ -253,16 +367,10 @@ class DiscreteVPScheduler(Scheduler):
             alpha_t=alpha_t.to(t.dtype),
             sigma_t=sigma_t.to(t.dtype),
             d_alpha_t=(-0.5 * dlam_dt * alpha_t).to(t.dtype),
-            # 注意: t=1 (s=0) では σ_t=0 のため d_sigma_t は発散する (連続 VP と同じ特異性).
-            # ε-予測学習や DDIM は微分を使わないので影響しない.
             d_sigma_t=(0.5 * dlam_dt * exp_neg / sigma_t).to(t.dtype),
         )
 
     def snr_inverse(self, snr: Tensor) -> Tensor:
-        """snr = α_t/σ_t から t を返す (公式 flow_matching の Scheduler API 互換).
-
-        e^{-Λ} = snr²/(1+snr²) ⇔ Λ = log(1 + snr⁻²) を区分線形 Λ(s) の逆写像で s に戻す.
-        """
         lam = torch.log1p(snr.to(torch.float64) ** (-2))
         lam = lam.clamp(0.0, float(self._lambdas[-1]))
         lambdas = self._lambdas.to(snr.device)

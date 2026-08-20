@@ -12,6 +12,24 @@ from src.flow_matching.path.scheduler.scheduler import CondOTScheduler, Schedule
 from src.flow_matching.utils import expand_tensor_like
 
 
+def _broadcast_like(value: Tensor, reference: Tensor) -> Tensor:
+    """Broadcast a scalar/batch scheduler coefficient to ``reference``."""
+    if value.ndim == reference.ndim:
+        return value
+    if value.ndim == 0:
+        return value.reshape(*([1] * reference.ndim)).expand_as(reference)
+    if value.ndim == 1:
+        return expand_tensor_like(input_tensor=value, expand_to=reference)
+    if value.ndim > reference.ndim:
+        raise ValueError(
+            f"Cannot broadcast coefficient of shape {tuple(value.shape)} "
+            f"to reference shape {tuple(reference.shape)}."
+        )
+    return value.reshape(*value.shape, *([1] * (reference.ndim - value.ndim))).expand_as(
+        reference
+    )
+
+
 class AffineProbPath(ProbPath):
     r"""The ``AffineProbPath`` class represents a specific type of probability path where the transformation between distributions is affine.
     An affine transformation can be represented as:
@@ -107,10 +125,10 @@ class AffineProbPath(ProbPath):
         """
         scheduler_output = self.scheduler(t)
 
-        alpha_t = scheduler_output.alpha_t
-        d_alpha_t = scheduler_output.d_alpha_t
-        sigma_t = scheduler_output.sigma_t
-        d_sigma_t = scheduler_output.d_sigma_t
+        alpha_t = _broadcast_like(scheduler_output.alpha_t, x_t)
+        d_alpha_t = _broadcast_like(scheduler_output.d_alpha_t, x_t)
+        sigma_t = _broadcast_like(scheduler_output.sigma_t, x_t)
+        d_sigma_t = _broadcast_like(scheduler_output.d_sigma_t, x_t)
 
         a_t = d_sigma_t / sigma_t
         b_t = (d_alpha_t * sigma_t - d_sigma_t * alpha_t) / sigma_t
@@ -133,10 +151,10 @@ class AffineProbPath(ProbPath):
         """
         scheduler_output = self.scheduler(t)
 
-        alpha_t = scheduler_output.alpha_t
-        d_alpha_t = scheduler_output.d_alpha_t
-        sigma_t = scheduler_output.sigma_t
-        d_sigma_t = scheduler_output.d_sigma_t
+        alpha_t = _broadcast_like(scheduler_output.alpha_t, x_t)
+        d_alpha_t = _broadcast_like(scheduler_output.d_alpha_t, x_t)
+        sigma_t = _broadcast_like(scheduler_output.sigma_t, x_t)
+        d_sigma_t = _broadcast_like(scheduler_output.d_sigma_t, x_t)
 
         a_t = d_alpha_t / alpha_t
         b_t = (d_sigma_t * alpha_t - d_alpha_t * sigma_t) / alpha_t
@@ -159,10 +177,10 @@ class AffineProbPath(ProbPath):
         """
         scheduler_output = self.scheduler(t)
 
-        alpha_t = scheduler_output.alpha_t
-        d_alpha_t = scheduler_output.d_alpha_t
-        sigma_t = scheduler_output.sigma_t
-        d_sigma_t = scheduler_output.d_sigma_t
+        alpha_t = _broadcast_like(scheduler_output.alpha_t, x_t)
+        d_alpha_t = _broadcast_like(scheduler_output.d_alpha_t, x_t)
+        sigma_t = _broadcast_like(scheduler_output.sigma_t, x_t)
+        d_sigma_t = _broadcast_like(scheduler_output.d_sigma_t, x_t)
 
         a_t = -d_sigma_t / (d_alpha_t * sigma_t - d_sigma_t * alpha_t)
         b_t = sigma_t / (d_alpha_t * sigma_t - d_sigma_t * alpha_t)
@@ -185,8 +203,8 @@ class AffineProbPath(ProbPath):
         """
         scheduler_output = self.scheduler(t)
 
-        alpha_t = scheduler_output.alpha_t
-        sigma_t = scheduler_output.sigma_t
+        alpha_t = _broadcast_like(scheduler_output.alpha_t, x_t)
+        sigma_t = _broadcast_like(scheduler_output.sigma_t, x_t)
 
         a_t = 1 / alpha_t
         b_t = -sigma_t / alpha_t
@@ -209,10 +227,10 @@ class AffineProbPath(ProbPath):
         """
         scheduler_output = self.scheduler(t)
 
-        alpha_t = scheduler_output.alpha_t
-        d_alpha_t = scheduler_output.d_alpha_t
-        sigma_t = scheduler_output.sigma_t
-        d_sigma_t = scheduler_output.d_sigma_t
+        alpha_t = _broadcast_like(scheduler_output.alpha_t, x_t)
+        d_alpha_t = _broadcast_like(scheduler_output.d_alpha_t, x_t)
+        sigma_t = _broadcast_like(scheduler_output.sigma_t, x_t)
+        d_sigma_t = _broadcast_like(scheduler_output.d_sigma_t, x_t)
 
         a_t = -d_alpha_t / (d_sigma_t * alpha_t - d_alpha_t * sigma_t)
         b_t = alpha_t / (d_sigma_t * alpha_t - d_alpha_t * sigma_t)
@@ -235,8 +253,8 @@ class AffineProbPath(ProbPath):
         """
         scheduler_output = self.scheduler(t)
 
-        alpha_t = scheduler_output.alpha_t
-        sigma_t = scheduler_output.sigma_t
+        alpha_t = _broadcast_like(scheduler_output.alpha_t, x_t)
+        sigma_t = _broadcast_like(scheduler_output.sigma_t, x_t)
 
         a_t = 1 / sigma_t
         b_t = -alpha_t / sigma_t

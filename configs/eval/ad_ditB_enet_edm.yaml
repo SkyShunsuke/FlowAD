@@ -1,0 +1,108 @@
+meta:
+  name: vfad
+  global_seed: 0
+  use_bfloat16: false
+
+data:
+  data_root: data/mvtec_ad
+  dataset_name: mvtec_ad_all
+  category: all
+  test_batch_size: 4
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: false
+  img_size: 256
+  transform_type: imagenet
+
+flow_matching:
+  scheduler:
+    name: edm
+    t_scheduler_train: edm_lognormal
+    t_scheduler_infer: edm_rho
+    params:
+      P_mean: -1.2
+      P_std: 1.2
+      # Replace with the measured standard deviation of normalized training latents.
+      sigma_data: 0.798
+      sigma_min: 0.002
+      sigma_max: 80.0
+      rho: 7.0
+      S_churn: 0.0
+      S_min: 0.0
+      S_max: .inf
+      S_noise: 1.0
+  solver:
+    name: edm_heun
+  pred_type: data
+  loss_type: edm
+  train_steps: -1
+
+model:
+  backbone:
+    model_name: efficientnet-b4
+    normalization: layer
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    pretrained: true
+  class_dropout_prob: 0.0
+  cond_channels: 768
+  depth: 12
+  hidden_size: 768
+  learn_sigma: false
+  mlp_ratio: 4.0
+  model_name: dit
+  num_heads: 12
+  patch_size: 1
+  t_scale: 1
+  use_class_labels: true
+
+resume:
+  resume_path: ./logs/ad_mc_ditB_enet_edm_0818/checkpoints/ckpt_epoch_300.pth
+
+logging:
+  log_dir: logs/ad_mc_ditB_enet_edm_0818/
+  eval:
+    eval_strategy: recon
+
+    # Number of ODE updates from edm_sigma_start to zero.
+    # A scalar runs one evaluation; a list runs a sweep in eval.py.
+    recon_steps: 1
+    ablation_steps: [200] 
+
+    # x_sigma = x_data + edm_sigma_start * epsilon.
+    # This is an EDM noise standard deviation, not a normalized time.
+    # Start with a sweep such as 0.1, 0.2, 0.5, 1.0 after latent normalization.
+    edm_sigma_start: 0.5
+    edm_sigma_min: 0.002
+    edm_rho: 7.0
+
+    # Keep reconstruction deterministic after the initial perturbation.
+    edm_S_churn: 0.0
+    edm_S_min: 0.0
+    edm_S_max: .inf
+    edm_S_noise: 1.0
+
+    # shared: the same epsilon field for every sample, reducing score variance.
+    # independent: a new epsilon for every sample.
+    edm_noise_mode: shared
+    edm_noise_seed: 0
+
+    solver_name: edm_heun
+    img_score_agg: diff+sum
+    metrics:
+      - img_auroc
+      - img_ap
+      - img_f1max
+      - px_auroc
+      - px_ap
+      - px_f1max
+      - px_aupro
+    save_dir: ./logs/ad_mc_ditB_enet_edm_0818/reconstruction/

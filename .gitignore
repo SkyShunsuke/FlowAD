@@ -4,6 +4,7 @@ logs
 vis
 batch_train.sh.*
 vae_kl16.*
+flowad
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -295,7 +295,7 @@ def _pro_weight(gt_mask: np.ndarray) -> np.ndarray:
     return weighted
 
 
-def _trapezoid_intep(interp: float, area: float, y1: float, y2: float
+def _trapz_intep(interp: float, area: float, y1: float, y2: float
                      ) -> float:
     # assert area >= 0
     # assert interp >= 0

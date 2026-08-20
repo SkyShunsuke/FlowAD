@@ -115,8 +115,11 @@ def evaluate_recon(
                 pass
                 z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
         else:
-            z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, start_t=inv_stop_time)
+            # z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, start_t=inv_stop_time)
             # z1_local = vf.sample_ddim(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
+            z1_local = vf.reconstruct_edm(
+                z1, sigma_start=eval_params.get('sigma_start', 0.5), steps=recon_steps, noise=noise.repeat(len(z1), 1, 1, 1)
+            )
         # -- compute reconstruction error as anomaly score
         mse_local = F.mse_loss(z1_local, z1, reduction='none').sum(dim=1)  # (B, h, w)
         imgs_local = denormalize_image(imgs_local) * 255.0

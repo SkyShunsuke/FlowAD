@@ -4,4 +4,4 @@ torchrun \
   --standalone \
   --nnodes=1 \
   --nproc-per-node=8 \
-  main.py --config_file ./configs/train/ad_ditB_mae.yaml --task train
+  main.py --config_file ./configs/train/ad_ditB_enet_edm.yaml --task train

@@ -19,7 +19,7 @@ from .mem_effic import (
     NegWeightStrategy,
     ReusableMap,
     _pro_weight as _pro_weight_np,
-    _trapezoid_intep,
+    _trapz_intep,
 )
 
 
