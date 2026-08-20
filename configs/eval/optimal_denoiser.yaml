@@ -1,0 +1,61 @@
+meta: 
+  name: vfad
+  global_seed: 0
+  use_bfloat16: False
+data:
+  data_root: data/mvtec_ad
+  dataset_name: mvtec_ad_all
+  category: all
+  test_batch_size: 4 # per GPU batch size for evaluation
+  num_workers: 8
+  pin_memory: True
+  persistent_workers: False
+  img_size: 256
+  transform_type: imagenet
+model:
+  backbone: 
+    model_name: vae-kl16
+    pretrained: true
+    normalization: null
+  # backbone:
+    # model_name: efficientnet-b4
+    # normalization: null
+    # outblocks:
+    # - 1
+    # - 5
+    # - 9
+    # - 21
+    # outstrides:
+    # - 2
+    # - 4
+    # - 8
+    # - 16
+    # pretrained: true
+logging:
+logging:
+  log_dir: logs/ad_mc_enet_optimal/
+  eval:
+    steps: 1
+    ablation_steps: [200] # default: [-1] 
+    inv_steps: 20
+    recon_steps: 1 # for reconstruction, we use inv/recon steps instead of 'steps'
+    stop_time: 0.8
+    solver_name: euler
+    img_score_agg: diff+sum
+    metrics: 
+      - img_auroc
+      - img_ap
+      - img_f1max
+      - px_auroc
+      - px_ap
+      - px_f1max
+      - px_aupro
+    save_dir: /home/acg17237wy/projects/FlowAD/artifacts/design_ablations/rawdata/optimal/mvtec
+    
+
+
+
+
+
+
+  

@@ -6,4 +6,4 @@
 
 __version__ = "1.0.10"
 
-from src.flow_matching.velocity_model import VelocityField
+from src.flow_matching.velocity_model import VelocityField, LocalizedClosedFM

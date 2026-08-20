@@ -872,9 +872,9 @@ if __name__ == "__main__":
         # ---------------------- DATASET LEGEND ----------------------
         show_dataset_legend=True,
         dataset_display_names=DATASET_DISPLAY_NAMES,
-        legend_loc="lower left",
-        legend_bbox_to_anchor=(0.015, 0.020),
-        legend_ncol=2,
+        legend_loc="lower right",
+        legend_bbox_to_anchor=(0.985, 0.020),
+        legend_ncol=3,
         legend_fontsize=6.4,
         # ------------------------------------------------------------
 

@@ -455,6 +455,21 @@ class LocalizedClosedFM(nn.Module):
         self.ref_batch_size = ref_batch_size
         
         self.bandwidth_min = bandwidth_min
+        
+        self.path = build_scheduler("affine_prob", {})
+        
+    def perturb(self, x1, x0, t):
+        """Perturb the data points for training.
+        Args:
+            x1 (torch.Tensor): The ending points.
+            x0 (torch.Tensor): The starting points.
+            t (torch.Tensor): The time steps.
+        Returns:
+            torch.Tensor: The perturbed points.
+        """
+        path_sample = self.path.sample(t=t, x_0=x0, x_1=x1)
+        return path_sample.x_t
+
 
     @torch.no_grad()
     def get_optimal_v(self, xt, t):

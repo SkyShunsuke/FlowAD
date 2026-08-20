@@ -14,7 +14,7 @@ def parse_args():
         type=str,
         default="train",
         required=True,
-        choices=["train", "eval", "analyze"],
+        choices=["train", "eval", "analyze", "eval_optimal"],
     )
     
     ### Loaded from torchrun
@@ -50,6 +50,9 @@ def main(params, args):
         if framework == "vfad":
             from src.vfad.eval import main as vfad_eval
             vfad_eval(params, args)
+    elif task == "eval_optimal":
+        from src.vfad.eval_optimal_denoiser import main as vfad_eval_optimal
+        vfad_eval_optimal(params, args)
     elif task == "analyze":
         framework = params['meta']['name']
         if framework == "vfad":

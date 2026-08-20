@@ -494,7 +494,7 @@ class AutoencoderKL(nn.Module):
 def create_vae(
     embed_dim = 16,
     ch_mult = (1, 1, 2, 2, 4),
-    ckpt_path = '/home/haselab/projects/sakai_ssd/FlowAD/vae_kl16.ckpt',
+    ckpt_path = '/home/acg17237wy/projects/FlowAD/weights/vae_kl16.ckpt',
     **kwargs
 ):
     model_type = "vae_kl"
