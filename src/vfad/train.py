@@ -21,7 +21,7 @@ from src.utils.log import setup_logging, get_logger, AverageMeter
 from src.utils.opt.optimizer import build_optimizer, save_checkpoint, load_checkpoint
 from src.utils.opt.scheduler import get_cosine_wd_scheduler, get_warmup_cosine_lr_scheduler
 from src.utils.opt.scaler import get_gradient_scaler
-from src.vfad.eval import evaluate_inv as eval
+from src.vfad.eval_recon import evaluate_recon as eval
 from src.vfad.visualize import generate_samples, save_samples
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -260,30 +260,30 @@ def main(params, args):
     logger.info(f"Starting training for {num_epochs} epochs...")
     best_mad = 0.0 if save_best else 1e4
     
-    all_latents = {}
-    train_loader_all = torch.utils.data.DataLoader(
-        train_dataset,
-        sampler=None,
-        batch_size=train_bs,
-        pin_memory=params['data'].get('pin_memory', True),
-        num_workers=params['data'].get('num_workers', 4),
-        persistent_workers=params['data'].get('persistent_workers', True),
-        drop_last=False,
-    )
+    # all_latents = {}
+    # train_loader_all = torch.utils.data.DataLoader(
+    #     train_dataset,
+    #     sampler=None,
+    #     batch_size=train_bs,
+    #     pin_memory=params['data'].get('pin_memory', True),
+    #     num_workers=params['data'].get('num_workers', 4),
+    #     persistent_workers=params['data'].get('persistent_workers', True),
+    #     drop_last=False,
+    # )
     
-    from tqdm import tqdm
-    for batch in tqdm(train_loader_all):
-        imgs, labels = batch["img"], batch["clslabel"]
-        pathid = batch["path"]
-        with torch.no_grad():
-            z1, _ = fe(imgs.to(device))  # (B, c, h, w)
-            z1 = norm_fn(z1)
+    # from tqdm import tqdm
+    # for batch in tqdm(train_loader_all):
+    #     imgs, labels = batch["img"], batch["clslabel"]
+    #     pathid = batch["path"]
+    #     with torch.no_grad():
+    #         z1, _ = fe(imgs.to(device))  # (B, c, h, w)
+    #         z1 = norm_fn(z1)
         
-        for i in range(len(labels)):
-            path = pathid[i]
-            latent = z1[i].detach().cpu()
-            all_latents[path] = latent
-    logger.info(f"Extracted latents for all training samples. Total: {len(all_latents)}")
+    #     for i in range(len(labels)):
+    #         path = pathid[i]
+    #         latent = z1[i].detach().cpu()
+    #         all_latents[path] = latent
+    # logger.info(f"Extracted latents for all training samples. Total: {len(all_latents)}")
     
     # compute sigma data for latents
     # sigma_data := sqrt(E[(z - E[z])^2]) for z in latents
@@ -316,20 +316,15 @@ def main(params, args):
             start, end = CUDAEvent(enable_timing=True), CUDAEvent(enable_timing=True)
             start.record()
             with torch.no_grad():
-                pass
-                # z1 = imgs
-                # out = fe(batch)
-                # z1 = out["fusion_feature_map"]
-                # z1, _ = fe(imgs)  # (B, c, h, w)
-                # z1 = fe.encode(imgs).sample().mul_(0.18215)  # (B, c, h, w)
+                z1, _ = fe(imgs)  # (B, c, h, w)  # (B, c, h, w)
             
             # collate latents for the batch
-            z1_list = []
-            for i in range(len(labels)):
-                path_i = path[i]
-                latent_i = all_latents[path_i]
-                z1_list.append(latent_i)
-            z1 = torch.stack(z1_list, dim=0).to(device)    
+            # z1_list = []
+            # for i in range(len(labels)):
+            #     path_i = path[i]
+            #     latent_i = all_latents[path_i]
+            #     z1_list.append(latent_i)
+            # z1 = torch.stack(z1_list, dim=0).to(device)    
             
             end.record()
             
@@ -436,7 +431,8 @@ def main(params, args):
                 verbose=True,
                 use_bfloat16=opt_params['use_bfloat16'],
                 distributed=args.distributed,
-                eval_params=eval_params
+                eval_params=eval_params,
+                noise_shape=feat_sz,
             )
             mad = eval_results['average']['mad']
             

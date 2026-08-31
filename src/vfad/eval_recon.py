@@ -68,6 +68,7 @@ def evaluate_recon(
     inv_steps = eval_params.get('inv_steps', 1) if eval_params is not None else 1
     recon_steps = eval_params.get('recon_steps', 1) if eval_params is not None else 1
     inv_stop_time = eval_params.get('inv_stop_time', 0.0) if eval_params is not None else 0.0
+    num_recon_emsemble = eval_params.get('num_recon_emsemble', 1) if eval_params is not None else 1
     
     assert all([met in SUPPORTED_METRICS for met in eval_metrics]), f"Some evaluation metrics are not supported. Supported metrics: {SUPPORTED_METRICS}"
     
@@ -91,7 +92,7 @@ def evaluate_recon(
     print("▶️Closed-form velocity fields constructed for each class.")
     
     logger.info("Extracting features and computing anomaly scores...")
-    noise_base = torch.randn((1, *noise_shape), device=device)
+    noise_base = torch.randn((num_recon_emsemble, *noise_shape), device=device)
     perturb_t = torch.tensor([inv_stop_time], device=device)
     for step, batch in tqdm(enumerate(dataloader), total=len(dataloader), disable=not verbose):
         
@@ -105,21 +106,26 @@ def evaluate_recon(
         # -- extract features
         z1, _ = extract_features(fe, imgs_local, device)  # (B, c, h, w)
         z1 = norm_fn(z1)
-        
+        z1_rep = z1.unsqueeze(0).repeat(num_recon_emsemble, 1, 1, 1, 1)  # (num_recon_emsemble, B, c, h, w)
+        z1_rep = z1_rep.reshape(num_recon_emsemble * len(z1), *z1.shape[1:])  # (num_recon_emsemble * B, c, h, w)
         # -- pertubation
-        zt = vf.perturb(z1, noise_base.repeat(len(z1), 1, 1, 1), perturb_t.repeat(len(z1))) # (B, c, h, w)
+        noise_rep = noise_base.unsqueeze(1).repeat(1, len(z1), 1, 1, 1)  # (num_recon_emsemble, B, c, h, w)
+        noise_rep = noise_rep.reshape(num_recon_emsemble * len(z1), *z1.shape[1:])  # (num_recon_emsemble * B, c, h, w)
+        clslabels_rep = clslabels_local.unsqueeze(0).repeat(num_recon_emsemble, 1)  # (num_recon_emsemble, B)
+        clslabels_rep = clslabels_rep.reshape(num_recon_emsemble * len(z1))  # (num_recon_emsemble * B,)
+        
+        zt = vf.perturb(z1_rep, noise_rep, perturb_t.repeat(num_recon_emsemble * len(z1))) # (num_recon_emsemble * B, c, h, w)
         
         # -- reconstruction through the velocity field
         if use_bfloat16:
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                pass
-                z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
+                z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
         else:
-            # z1_local = vf.sample(zt, clslabels_local, steps=recon_steps, start_t=inv_stop_time)
+            z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, start_t=inv_stop_time)
+        z1_local = z1_local.reshape(num_recon_emsemble, len(z1), *z1.shape[1:]).mean(dim=0)  # (B, c, h, w)
             # z1_local = vf.sample_ddim(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
-            z1_local = vf.reconstruct_edm(
-                z1, sigma_start=eval_params.get('sigma_start', 0.5), steps=recon_steps, noise_base=noise_base.repeat(len(z1), 1, 1, 1)
-            )
+            # z1_local = vf.reconstruct_edm(
+            #     z1, sigma_start=eval_params.get('sigma_start', 0.5), steps=recon_steps, noise_base=noise_base.repeat(len(z1), 1, 1, 1)
         # -- compute reconstruction error as anomaly score
         mse_local = F.mse_loss(z1_local, z1, reduction='none').sum(dim=1)  # (B, h, w)
         imgs_local = denormalize_image(imgs_local) * 255.0

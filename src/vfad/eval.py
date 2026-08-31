@@ -26,7 +26,7 @@ from src.utils.log import setup_logging, get_logger
 from src.utils.opt.optimizer import load_model_only
 from src.vfad.eval_inversion import evaluate_inv
 from src.vfad.eval_density import evaluate_density
-from src.vfad.eval_recon import evaluate_recon_grad
+from src.vfad.eval_recon import evaluate_recon
 
 import logging
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ def main(params, args):
         eval_func = evaluate_density
     elif eval_strategy == 'recon':
         logger.info("Using reconstruction-based evaluation strategy.")
-        eval_func = evaluate_recon_grad
+        eval_func = evaluate_recon
     else:
         raise ValueError(f"Unknown evaluation strategy: {eval_strategy}")
     

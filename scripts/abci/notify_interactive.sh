@@ -1,0 +1,1 @@
+qsub -I -P gch51615 -q rt_HF -l select=1 -l walltime=1:00:00 -m b -M sshunsuke0102@gmail.com

@@ -5,7 +5,7 @@ export CUDA_VISIBLE_DEVICES=0  # REPLACE with the GPU IDs you want to use
 GPU_NUM=1  # REPLACE with the number of GPUs you want to use
 ADDR=localhost # REPLACE with the master node address if using multiple nodes
 PORT=12363  # REPLACE with an available port number
-CONFIG_FILE=./configs/eval/ad_ditB_enet_edm.yaml  # REPLACE with your config file path
+CONFIG_FILE=./configs/eval/ad_ditG_enet.yaml  # REPLACE with your config file path
 
 torchrun \
     --nnodes=1 \
