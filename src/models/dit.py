@@ -263,6 +263,7 @@ class DiT(nn.Module):
         mlp_ratio=4.,
         class_dropout_prob=0.0,
         num_classes=15,
+        num_views=5,
         use_class_labels=False,
         learn_sigma=False,
         pos_embed: PosEmbedding = None,
@@ -286,11 +287,13 @@ class DiT(nn.Module):
         self.use_class_labels = use_class_labels
         self.learn_sigma = learn_sigma
         self.t_scale = t_scale
+        self.num_views = num_views
         
         self.x_embedder = PatchEmbed(self.input_size, patch_size, self.in_channels, hidden_size)
         self.x_embedder_linear = nn.Linear(self.in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size, t_scale=t_scale)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+        self.v_embedder = LabelEmbedder(num_views, hidden_size, class_dropout_prob)
         
         num_patches = self.x_embedder.num_patches
         self.num_patches = num_patches
@@ -334,7 +337,8 @@ class DiT(nn.Module):
 
         # Initialize label embedding table:
         nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
-
+        nn.init.normal_(self.v_embedder.embedding_table.weight, std=0.02)
+        
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
@@ -379,7 +383,7 @@ class DiT(nn.Module):
         x = rearrange(x, 'b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1=p, p2=p, h=h, w=w, c=x.shape[1])
         return x
 
-    def forward(self, x, t, y=None, return_tokens=False, **kwargs):
+    def forward(self, x, t, y=None, view_idx=None, return_tokens=False, **kwargs):
         """Apply model to an input batch.
         Args:
             x (Tensor): input tensor (B, C, H, W)
@@ -410,9 +414,15 @@ class DiT(nn.Module):
         t = self.t_embedder(t)  # (B, D)
         if self.num_classes is not None and y is not None:
             y = self.y_embedder(y, self.training)  # (B, D)
-            cond = t + y
+        if self.num_views is not None and view_idx is not None:
+            view_emb = self.v_embedder(view_idx, self.training)  # (B, D)
         else:
-            cond = t
+            view_emb = None
+        cond = t
+        if y is not None:
+            cond = cond + y
+        if view_emb is not None:
+            cond = cond + view_emb
         
         for block in self.blocks:
             x = block(x, cond)  # (B, N, C)

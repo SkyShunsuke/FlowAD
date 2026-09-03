@@ -5,8 +5,40 @@ from torchvision import models
 from torchvision.models import VGG19_Weights, EfficientNet_V2_S_Weights, EfficientNet_V2_M_Weights, EfficientNet_V2_L_Weights, ResNet50_Weights
 from .efficientnet import build_efficient
 from .vae import create_vae
+import timm
 
 from einops import rearrange
+
+class WRNWrapper(nn.Module):
+    def __init__(self, model, target_layers=["layer1", "layer2", "layer3"]):
+        super(WRNWrapper, self).__init__()
+        self.model = model
+        self.target_layers = target_layers
+        self.features = {}
+        self.hooks = []
+        self._register_hooks()
+
+    def _register_hooks(self):
+        def hook_fn(name):
+            def hook(module, input, output):
+                self.features[name] = output
+            return hook
+
+        for name, module in self.model.named_modules():
+            if name in self.target_layers:
+                hook = module.register_forward_hook(hook_fn(name))
+                self.hooks.append(hook)
+    
+    def forward(self, x):
+        self.features.clear()
+        _ = self.model(x)
+        out_feature = [self.features[name] for name in self.target_layers]
+        # Layer1: (B, C1, H1, W1), Layer2: (B, C2, H2, W2), Layer3: (B, C3, H3, W3)
+        # align feature resolution to the H3, W3 with interpolation
+        for i in range(len(out_feature) - 1):
+            out_feature[i] = F.interpolate(out_feature[i], size=out_feature[-1].shape[2:], mode='bilinear', align_corners=False)
+        concat_feature = torch.cat(out_feature, dim=1)  # Concatenate features along the channel dimension
+        return concat_feature, [concat_feature]
 
 class PDNWrapper(nn.Module):
     def __init__(self, model):
@@ -133,8 +165,10 @@ def get_backbone_feature_shape(model_name):
         return (272, 16, 16)
     elif model_name == "vae-kl16":
         return (16, 16, 16)
+    elif model_name == "vae_ldm":
+        return (16, 16, 16)
     elif model_name == "wide_resnet50_2":
-        return (2048, 8, 8)
+        return (1792, 16, 16)
     elif model_name == "dinov2-small":
         return (384, 16, 16)
     elif model_name == "dinov2-base":
@@ -284,6 +318,9 @@ def get_backbone(**kwargs):
     elif 'efficientnet' in model_name:
         net =  get_efficientnet(**kwargs)
         return BackboneWrapper(net, scale_factors=[0.125, 0.25, 0.5, 1.0])
+    elif 'wide_resnet' in model_name:
+        net = get_wrn(**kwargs)
+        return WRNWrapper(net)
     elif 'dinov1' in model_name:
         net = get_dino(model_name, **kwargs)
         return net
@@ -312,7 +349,11 @@ class Identity(nn.Module):
 
 def get_intermediate_output_hook(layer, input, output):
     BackboneModel.intermediate_cache.append(output)
-
+    
+def get_wrn(**kwargs):
+    model_name = kwargs['model_name']
+    return timm.create_model(model_name, pretrained=True, features_only=False)
+    
 class BackboneModel(nn.Module):
     intermediate_cache = []
     

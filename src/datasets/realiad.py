@@ -18,6 +18,7 @@ REALIAD_CLASSES = [
     'toy', 'toy_brick', 'transistor1', 'u_block', 'usb', 'usb_adaptor',
     'vcpill', 'wooden_beads', 'woodstick', 'zipper', 'mounts', 'tape'
 ] 
+# REALIAD_CLASSES = ["eraser"]
 
 NORMAL_PREFIX = 'OK'
 
@@ -86,9 +87,9 @@ class RealIAD(Dataset):
             img = img.convert('RGB')
         
         inputs["clsname"] = cls_name
-        inputs["clslabel"] = REALIAD_CLASSES.index(cls_name)
+        inputs["clslabel"] = 0 # TODO: # REALIAD_CLASSES.index(cls_name)
         inputs["path"] = str(img_file)
-        
+        inputs["view"] = int(str(img_file).split("_")[-2].split("C")[-1]) - 1
         sample = self.custom_transforms(img)
         
         if self.split == 'train' or self.split == 'val':

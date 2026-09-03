@@ -98,7 +98,8 @@ def evaluate_recon(
         
         # -- prepare data
         imgs_local, clslabels_local = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
-        imgs_local, clslabels_local = imgs_local.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True)
+        view_idx_local = batch["view"]  # (B,)
+        imgs_local, clslabels_local, view_idx_local = imgs_local.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True), view_idx_local.to(device, non_blocking=True)
         anom_labels_local, anom_masks_local = batch['label'], batch['mask'] # (B,), (B, H, W)
         anom_labels_local, anom_masks_local = anom_labels_local.to(device, non_blocking=True), anom_masks_local.to(device, non_blocking=True)
         idx_local = batch["index"].to(device, non_blocking=True)  # (B,)
@@ -119,9 +120,9 @@ def evaluate_recon(
         # -- reconstruction through the velocity field
         if use_bfloat16:
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
+                z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time,) # view_idx=view_idx_local.repeat(num_recon_emsemble))  # (B, c, h, w)
         else:
-            z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, start_t=inv_stop_time)
+            z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, start_t=inv_stop_time)# , view_idx=view_idx_local.repeat(num_recon_emsemble))
         z1_local = z1_local.reshape(num_recon_emsemble, len(z1), *z1.shape[1:]).mean(dim=0)  # (B, c, h, w)
             # z1_local = vf.sample_ddim(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
             # z1_local = vf.reconstruct_edm(

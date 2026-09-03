@@ -505,3 +505,7 @@ def create_vae(
             ch_mult=ch_mult,
             ckpt_path=ckpt_path,
         )
+    elif model_type == "vae_ldm":
+        from diffuser.models import AutoencoderKL as LdmAutoencoderKL
+        vae = LdmAutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+        return vae

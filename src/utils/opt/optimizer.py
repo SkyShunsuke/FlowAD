@@ -93,6 +93,7 @@ def save_checkpoint(
     scaler: torch.amp.GradScaler,
     lr_scheduler: WarmupCosineLRSchedule,
     wd_scheduler: CosineWDSchedule,
+    save_model_only: bool = True,
 ):
     checkpoint = {
         'epoch': epoch,
@@ -102,6 +103,8 @@ def save_checkpoint(
         'lr_scheduler': lr_scheduler.state_dict(),
         'wd_scheduler': wd_scheduler.state_dict(),
     }
+    if save_model_only:
+        checkpoint = {'model': checkpoint['model']}
     torch.save(checkpoint, save_path)
     logger.info(f'Saved checkpoint at epoch {epoch} to {save_path}')
 

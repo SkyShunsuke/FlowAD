@@ -310,7 +310,8 @@ def main(params, args):
             # -- load images and labels
             imgs, labels = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
             path = batch["path"]
-            imgs, labels = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
+            view_idx = batch["view"]  # (B,)
+            imgs, labels, view_idx = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True), view_idx.to(device, non_blocking=True)
 
             # -- feature extraction (sample z1)
             start, end = CUDAEvent(enable_timing=True), CUDAEvent(enable_timing=True)
@@ -338,7 +339,7 @@ def main(params, args):
             # -- fwd pass of VF
             with torch.amp.autocast("cuda", enabled=opt_params['use_bfloat16']):
                 start.record()
-                loss = vf(z1, labels)  
+                loss = vf(z1, labels)# , view_idx=view_idx)  
                 end.record()
             torch.cuda.synchronize()
             vf_time = start.elapsed_time(end)  # [ms]
@@ -460,6 +461,7 @@ def main(params, args):
                         scaler=scaler,
                         lr_scheduler=lr_scheduler,
                         wd_scheduler=wd_scheduler,
+                        save_model_only=params['logging']['ckpt']['save_model_only'],
                     )
                     logger.info(f"New best model saved at epoch {epoch} with MAD: {best_mad:.4f}")
         
@@ -497,6 +499,7 @@ def main(params, args):
                 scaler=scaler,
                 lr_scheduler=lr_scheduler,
                 wd_scheduler=wd_scheduler,
+                save_model_only=params['logging']['ckpt']['save_model_only'],
             )
         elif params['logging']['ckpt']['save_latest'] and is_main():
             save_checkpoint(
@@ -506,6 +509,7 @@ def main(params, args):
                 opt=optimizer,
                 scaler=scaler,
                 lr_scheduler=lr_scheduler,
+                save_model_only=params['logging']['ckpt']['save_model_only'],
                 wd_scheduler=wd_scheduler,
             )
         else:
