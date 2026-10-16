@@ -94,10 +94,10 @@ class BMAD(Dataset):
         if self.split == "train":
             img_files = sorted(Path(os.path.join(self.data_root, self.category, 'train', 'good')).glob(ext))
         elif self.split == "val":
-            img_files = sorted(Path(os.path.join(self.data_root, self.category, 'val', 'good', 'img')).glob(ext))
+            img_files = sorted(Path(os.path.join(self.data_root, self.category, 'val', 'good')).glob(ext))
         elif self.split == "test":
-            img_files =  sorted(Path(os.path.join(self.data_root, self.category, 'test', 'good', 'img')).glob(ext))
-            img_files += sorted(Path(os.path.join(self.data_root, self.category, 'test', 'Ungood', 'img')).glob(ext))
+            img_files =  sorted(Path(os.path.join(self.data_root, self.category, 'test', 'good')).glob(ext))
+            img_files += sorted(Path(os.path.join(self.data_root, self.category, 'test', 'Ungood')).glob(ext))
         return img_files
     
     def __getitem__(self, index):
@@ -113,7 +113,7 @@ class BMAD(Dataset):
             img_file = self.img_files[index]
             label = self.labels[index]
         
-        cls_name_idx = -4 if self.split == 'train' else -5
+        cls_name_idx = -3 if self.split == 'train' else -4
         cls_name = str(img_file).split(os.path.sep)[cls_name_idx]
         with open(img_file, 'rb') as f:
             img = Image.open(f)
@@ -136,16 +136,16 @@ class BMAD(Dataset):
             else:
                 inputs["anom_type"] = str(img_file).split(os.path.sep)[-2]
             if self.is_mask:
-                mask_dir =  img_file.parent.parent / 'label' 
-                mask_file = mask_dir / img_file.name
-                if "/good/" in str(img_file) or cls_name in NOMASK_CLASSES:
-                    # If the class does not have a mask or is 'good', create a blank mask
-                    mask = Image.new('L', (self.input_res, self.input_res), 0)
-                else:
-                    with open(mask_file, 'rb') as f:
-                        mask = Image.open(f)
-                        mask = mask.convert('L')
-
+                # mask_dir =  img_file.parent.parent / 'label' 
+                # mask_file = mask_dir / img_file.name
+                # if "/good/" in str(img_file) or cls_name in NOMASK_CLASSES:
+                #     # If the class does not have a mask or is 'good', create a blank mask
+                #     mask = Image.new('L', (self.input_res, self.input_res), 0)
+                # else:
+                #     with open(mask_file, 'rb') as f:
+                #         mask = Image.open(f)
+                #         mask = mask.convert('L')
+                mask = Image.new('L', (self.input_res, self.input_res), 0)
                 mask = self.mask_transform(mask)
                 inputs["mask"] = mask
             return inputs

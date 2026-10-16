@@ -148,3 +148,39 @@ class RealIAD(Dataset):
         else:
             raise ValueError(f"Unknown split: {self.split}. Expected 'train' or 'test'.")
         return files, labels, mask_paths
+    
+if __name__ == "__main__":
+    path = "/home/acg17237wy/projects/FlowAD/data/realiad"
+    meta_dir = "/home/acg17237wy/projects/FlowAD/data/realiad_meta/realiad_jsons"
+    
+    all_datasets = []
+    for category in REALIAD_CLASSES:
+        dataset = RealIAD(path, meta_dir=meta_dir, category=category, split="train", input_res=256)
+        all_datasets.append(dataset)
+    print(f"Total datasets loaded: {len(all_datasets)}")
+    
+    # print total training normal samples
+    total_normal = 0
+    for dataset in all_datasets:
+        total_normal += len(dataset)
+    print(f"Total training normal samples: {total_normal}")
+    
+    all_test_datasets = []
+    for category in REALIAD_CLASSES:
+        dataset = RealIAD(path, meta_dir=meta_dir, category=category, split="test", input_res=256)
+        all_test_datasets.append(dataset)
+    print(f"Total test datasets loaded: {len(all_test_datasets)}")
+    
+    # print total test normal samples
+    total_test_normal = 0
+    for dataset in all_test_datasets:
+        total_test_normal += sum(1 for label in dataset.labels if label == 0)
+    print(f"Total test normal samples: {total_test_normal}")
+    
+    # print total test abnormal samples
+    total_test_abnormal = 0
+    for dataset in all_test_datasets:
+        total_test_abnormal += sum(1 for label in dataset.labels if label != 0)
+    print(f"Total test abnormal samples: {total_test_abnormal}")
+    
+    

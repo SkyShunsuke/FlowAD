@@ -1,0 +1,122 @@
+data:
+  category: u_block
+  data_root: data/realiad
+  dataset_name: realiad
+  img_size: 256
+  meta_dir: ./data/realiad_meta/realiad_jsons
+  num_workers: 8
+  persistent_workers: false
+  pin_memory: true
+  test_batch_size: 32
+  train_batch_size: 8
+  transform_type: imagenet
+flow_matching:
+  loss_type: velocity
+  pred_type: velocity
+  scheduler:
+    name: affine_prob
+    t_mu: -2.1972246
+    t_scheduler_infer: linear
+    t_scheduler_train: logistic
+    t_sigma: 0.35
+  solver:
+    name: euler
+  train_steps: -1
+logging:
+  ckpt:
+    ckpt_epoch_freq: 500
+    save_best: true
+    save_latest: false
+    save_model_only: true
+  eval:
+    ablation_steps:
+    - -1
+    eval_strategy: recon
+    exact_divergence: false
+    hutchinson_batch_size: 2
+    hutchinson_samples: 10
+    img_score_agg: diff+sum
+    inv_steps: 20
+    inv_stop_time: 0.6
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+    num_recon_emsemble: 1
+    recon_steps: 40
+    save_dir: null
+    solver_name: euler
+    steps: 1
+  log_dir: logs/realiad_ditB_enet/u_block/eval_2d_sweep/s0.4_n40/
+  log_stdout: true
+  log_step_freq: 100
+  use_csv: true
+  use_tensorboard: true
+  vis:
+    denorm_type: imagenet
+    num_samples_per_class: 16
+    solver_name: midpoint
+    steps: 50
+    vis_epoch_freq: 500
+  wandb:
+    entity: shuns71
+    project_name: VFAD
+    run_name: realiad_u_block_ditB_enet
+    use_wandb: false
+meta:
+  global_seed: 0
+  name: vfad
+  use_bfloat16: true
+model:
+  backbone:
+    feature_res: 32
+    model_name: efficientnet-b4
+    normalization: null
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    pretrained: true
+  class_dropout_prob: 0.0
+  cond_channels: 768
+  depth: 12
+  hidden_size: 768
+  learn_sigma: false
+  mlp_ratio: 4.0
+  model_name: dit
+  num_heads: 12
+  patch_size: 2
+  t_scale: 1000
+  use_class_labels: true
+opt:
+  all_gather: false
+  bias_decay: false
+  clip_grad: 1.0
+  epochs: 300
+  fix_lr_strategy: const
+  fix_lr_thres: -1
+  fix_wd_strategy: const
+  fix_wd_thres: -1
+  global_seed: 0
+  ipe_scale: 1.0
+  lr_end: 5.0e-06
+  lr_start: 1.0e-06
+  lr_warmup: 5.0e-05
+  lr_warmup_epochs: 40
+  name: adamw
+  norm_decay: false
+  use_bfloat16: true
+  wd_end: 0.0
+  wd_start: 0.0
+resume:
+  resume_path: logs/realiad_ditB_enet/u_block/checkpoints/ckpt_best.pth

@@ -5,8 +5,8 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7  # REPLACE with the GPU IDs you want
 GPU_NUM=8  # REPLACE with the number of GPUs you want to use
 ADDR=localhost # REPLACE with the master node address if using multiple nodes
 PORT=12363  # REPLACE with an available port number
-CONFIG_FILE=./configs/eval/realiad_ditG_enet.yaml  # REPLACE with your config file path
-
+CONFIG_FILE=./configs/eval/btad_ditB_vae.yaml  # REPLACE with your config file path
+    
 torchrun \
     --nnodes=1 \
     --nproc-per-node=$GPU_NUM \

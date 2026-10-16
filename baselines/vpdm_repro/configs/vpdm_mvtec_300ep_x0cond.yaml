@@ -1,0 +1,76 @@
+meta:
+  name: vpdm
+
+data:
+  dataset_name: mvtec_ad_all
+  data_root: data/mvtec_ad
+  category: all
+  img_size: 224              # paper App. D
+  transform_type: imagenet
+  train_batch_size: 32       # paper App. D
+  feat_norm: global          # NOT in paper: scalar standardisation of features (DDPM assumes ~unit variance)
+
+model:
+  backbone:
+    model_name: efficientnet-b4
+    outblocks: [1, 5, 9, 21]   # stages 1-4 -> 24+32+56+160 = 272 ch (paper App. D)
+    outstrides: [2, 4, 8, 16]
+  feature_size: 32             # paper App. D
+  in_channels: 272
+  # denoiser: NOT specified in the paper; guided-diffusion U-Net (baselines/amdm_repro
+  # copy) on concat[x_t, y_hat], widened:
+  # model_channels must be >= 272: eps-prediction of 272 i.i.d. noise channels
+  # through a 128-wide path has an MSE floor of ~1-128/272 (observed 0.55)
+  model_channels: 320
+  num_res_blocks: 2
+  attention_ds: [2, 4]
+  channel_mult: [1, 1, 2]
+  num_heads: 4
+  num_head_channels: -1
+  use_scale_shift_norm: true
+  resblock_updown: false
+  dropout: 0.0
+
+vpot:
+  num_prototypes: 50         # paper Sec. 4.1
+  down: 4                    # downsampler multiplier (paper Sec. 4.1)
+  eps: 1.0                   # entropic weight = 1 as in Eq. 11
+  sinkhorn_iters: 100
+
+diffusion:
+  num_timesteps: 1000        # paper Sec. 4.1
+  beta_start: 1.0e-4
+  beta_end: 0.02
+  endpoint: yhat             # 'yhat' = VPDM; 'standard' = N(0,I) DDPM ablation
+  clip_x0: pixel             # NOT in Alg. 2: clip x0_hat to train min/max (as Ho et al.'s sampler clips to [-1,1]); unclipped chain diverges
+
+opt:
+  lr: 2.0e-4                 # denoiser. Paper App. D: 1e-3, which collapses to a constant eps-predictor here (out/diag*, out/diag3 L)
+  proto_lr: 1.0e-3           # prototypes keep the paper's lr
+  epochs: 300                # accelerated protocol (paper: unspecified; 1000-ep runs in out/vpdm_mvtec_s*)
+  warmup_steps: 1000         # linear warmup (not in paper)
+  global_seed: 0
+  clip_grad: 1.0             # denoiser grad clip (not in paper)
+  collapse_guard: {threshold: 0.95, min_epoch: 3, snapshot_every: 2}  # not in paper; see train_vpdm.py
+  ema_rate: 0.9999           # EMA evaluated as a secondary result (not in paper)
+
+logging:
+  log_dir: baselines/vpdm_repro/out/vpdm300x_mvtec_jitter_s0/
+  log_epoch_freq: 10
+  eval:
+    eval_epoch_freq: 150       # monitoring only (EMA, Alg. 2); reported numbers = final epoch
+    test_batch_size: 32
+    shuffle_test: true
+    img_pool_kernel: 16
+    final_variants: [full_batch, full_semi, yhat_batch]
+    ema_final_variants: [full_batch]
+    save_maps: false
+    metrics: [img_auroc, img_ap, img_f1max, px_auroc, px_ap, px_f1max, px_aupro]
+
+# NOT in the paper: denoiser also receives the input features (CARD-style
+# eps_theta(x, y_t, f(x), t)); corruption at training time only.
+x0_cond:
+  mode: jitter      # none | clean | jitter | mask
+  jitter: 1.0       # noise std relative to per-location feature RMS (~UniAD scale 20)
+  ratio: 0.5        # mask: fraction of blocks replaced by y_hat
+  patch: 4          # mask: block size on the 32x32 map

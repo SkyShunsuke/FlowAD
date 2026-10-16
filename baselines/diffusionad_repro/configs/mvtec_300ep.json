@@ -1,0 +1,1 @@
+{"dataset": "mvtec", "EPOCHS": 300, "eval_every": 50, "ckpt_every": 5, "num_workers": 8}

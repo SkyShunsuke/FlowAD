@@ -1,0 +1,34 @@
+AMDM (OmiAD teacher, lab reimplementation) inference FPS
+date: 2026-09-20 14:58:52
+python: /home/haselab/anaconda3/envs/flowad/bin/python
+torch: 2.5.1+cu124  cuda: 12.4
+GPU: NVIDIA RTX A6000  (CUDA_VISIBLE_DEVICES=0)
+config: /newssd/projects/sakai/FlowAD/baselines/amdm_repro/configs/amdm_mvtec_ft.yaml
+precision: fp32 (no autocast, as in evaluate_amdm); torch.no_grad, .eval(), cudnn.benchmark=True
+batch size: 1 | input: 3x224x224 (random, already on GPU) | latent: (272, 32, 32) raw EfficientNet-b4 stages 1-4
+weights: /newssd/projects/sakai/FlowAD/baselines/amdm_repro/out/amdm_mc_unet_enet_mvtec_ft_0918/checkpoints/ckpt_best.pth [ema weights, epoch 1150]
+UNet params: 40.25M | backbone (EfficientNet-b4) params: 19.34M
+fixed shared noise: shape (1, 272, 32, 32), CPU generator seed 0 (evaluate_amdm protocol)
+warmup: 10 full iterations; 5 repeats
+
+=== PRIMARY 40-step teacher (t_init=960, DDIM steps=40, eta=0) ===
+  repeat 1/5:   683.88 ms/img over 20 iters (backbone  16.08 | ddim   667.64 | map  0.16 ms)
+  repeat 2/5:   683.88 ms/img over 20 iters (backbone  15.87 | ddim   667.87 | map  0.15 ms)
+  repeat 3/5:   686.42 ms/img over 20 iters (backbone  15.86 | ddim   670.41 | map  0.15 ms)
+  repeat 4/5:   686.67 ms/img over 20 iters (backbone  16.09 | ddim   670.40 | map  0.17 ms)
+  repeat 5/5:   684.72 ms/img over 20 iters (backbone  15.76 | ddim   668.82 | map  0.15 ms)
+  stage breakdown (mean of repeat means): backbone 15.93 ms | DDIM loop 669.03 ms | anomaly map 0.15 ms
+  FINAL PRIMARY 40-step teacher: 685.11 +/- 1.35 ms/img  ->  1.460 +/- 0.003 FPS  (mean +/- std across 5 repeats)
+
+=== CONTEXT 1-step (single UNet forward, student cost profile) (t_init=960, DDIM steps=1, eta=0) ===
+  repeat 1/5:    32.37 ms/img over 200 iters (backbone  15.44 | ddim    16.81 | map  0.12 ms)
+  repeat 2/5:    32.34 ms/img over 200 iters (backbone  15.42 | ddim    16.80 | map  0.12 ms)
+  repeat 3/5:    32.35 ms/img over 200 iters (backbone  15.43 | ddim    16.79 | map  0.12 ms)
+  repeat 4/5:    32.36 ms/img over 200 iters (backbone  15.44 | ddim    16.80 | map  0.12 ms)
+  repeat 5/5:    32.37 ms/img over 200 iters (backbone  15.43 | ddim    16.81 | map  0.12 ms)
+  stage breakdown (mean of repeat means): backbone 15.43 ms | DDIM loop 16.80 ms | anomaly map 0.12 ms
+  FINAL CONTEXT 1-step (single UNet forward, student cost profile): 32.36 +/- 0.01 ms/img  ->  30.904 +/- 0.012 FPS  (mean +/- std across 5 repeats)
+
+=== SUMMARY ===
+PRIMARY  AMDM 40-step teacher : 685.11 +/- 1.35 ms/img = 1.460 +/- 0.003 FPS
+CONTEXT  1-step (student cost): 32.36 +/- 0.01 ms/img = 30.904 +/- 0.012 FPS

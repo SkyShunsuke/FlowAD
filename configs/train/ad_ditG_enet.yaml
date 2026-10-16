@@ -14,18 +14,19 @@ flow_matching:
   pred_type: velocity
   scheduler:
     name: affine_prob
-    t_mu: -0.8
+    t_mu: -2.1972246
     t_scheduler_infer: linear
-    t_scheduler_train: linear
-    t_sigma: 0.8
+    t_scheduler_train: logistic
+    t_sigma: 0.35
   solver:
     name: euler
   train_steps: -1
 logging:
   ckpt:
-    ckpt_epoch_freq: 500
-    save_best: true
+    ckpt_epoch_freq: 300
+    save_best: false
     save_latest: false
+    save_model_only: true
   eval:
     eval_epoch_freq: 25
     img_score_agg: diff+sum
@@ -41,7 +42,7 @@ logging:
     steps: 1
     inv_stop_time: 0.1
     recon_steps: 1
-  log_dir: logs/ad_mc_ditG_enet_0829/
+  log_dir: logs/ad_mc_ditG_enet_0903/
   log_stdout: true
   log_step_freq: 100
   use_csv: true
@@ -55,7 +56,7 @@ logging:
   wandb:
     entity: shuns71
     project_name: VFAD
-    run_name: ad_mc_ditG_enet_0829
+    run_name: ad_mc_ditG_enet_0903 
     use_wandb: true
 meta:
   name: vfad
@@ -82,9 +83,10 @@ model:
   mlp_ratio: 4.0
   model_name: dit
   num_heads: 16
-  patch_size: 1
+  patch_size: 2
   t_scale: 1000
   use_class_labels: true
+  num_views: 5
 opt:
   all_gather: false
   bias_decay: false

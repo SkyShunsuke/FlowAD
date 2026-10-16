@@ -1,0 +1,99 @@
+meta:
+  name: amdm
+data:
+  dataset_name: realiad_all
+  data_root: /home/acg17237wy/projects/FlowAD/data/realiad
+  meta_dir: /home/acg17237wy/projects/FlowAD/data/realiad_meta/realiad_jsons
+  category: all
+  img_size: 224
+  transform_type: imagenet
+  train_batch_size: 4
+  test_batch_size: 32
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: false
+  latent_cache: disk
+model:
+  backbone:
+    model_name: efficientnet-b4
+    pretrained: true
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    normalization: null
+  feature_size: 32
+  in_channels: 272
+  model_channels: 128
+  num_res_blocks: 2
+  attention_ds:
+  - 2
+  - 4
+  channel_mult:
+  - 1
+  - 2
+  - 2
+  - 2
+  num_heads: 4
+  num_head_channels: -1
+  use_scale_shift_norm: true
+  resblock_updown: false
+  dropout: 0.0
+diffusion:
+  num_timesteps: 1000
+  beta_start: 0.0001
+  beta_end: 0.02
+  p_min: 0.1
+  p_max: 0.4
+  k: 2.0
+opt:
+  lr: 0.001
+  epochs: 300
+  global_seed: 0
+  clip_grad: 1.0
+logging:
+  log_dir: baselines/amdm_repro/out/onestep_amdm_realiad_0922/
+  log_step_freq: 100
+  ckpt_epoch_freq: 25
+  ckpt_snapshot_freq: 200
+  eval:
+    eval_during_training: false
+    eval_epoch_freq: 50
+    accumulate_rank0_only: true
+    t_init: 960
+    recon_steps: 40
+    img_score_agg: max
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+    distributed_metrics: true
+    eval_weights:
+    - ema
+    eval_variants:
+    - t_init: 960
+      recon_steps: 40
+    - t_init: 100
+      recon_steps: 1
+    - t_init: 300
+      recon_steps: 1
+    - t_init: 500
+      recon_steps: 1
+    - t_init: 659
+      recon_steps: 1
+    - t_init: 800
+      recon_steps: 1
+    - t_init: 960
+      recon_steps: 1
+resume:
+  resume_path: null

@@ -13,6 +13,8 @@ from .bmad import BMAD, BMAD_CLASSES
 from .mvtec_ad2 import MVTecADT, ADT_CLASSES
 from .tcad import TCAD, TCAD_CLASSES
 from .mvtec_loco import MVTecLOCO, LOCO_CLASSES
+from .grocery import Grocery, GL_CLASSES
+from .btad import BTAD, BTAD_CLASSES
 
 import logging
 logger = logging.getLogger(__name__)
@@ -78,6 +80,11 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
     elif dataset_name == 'bmad':
         return GlobalIndexConcatDataset([BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'btad':
+        return GlobalIndexConcatDataset([BTAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+        # return GlobalIndexConcatDataset([BMAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+        #     transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_2':
         return GlobalIndexConcatDataset([MVTecADT(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
@@ -86,6 +93,9 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_loco':
         return GlobalIndexConcatDataset([MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+            transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
+    elif dataset_name == 'grocery':
+        return GlobalIndexConcatDataset([Grocery(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
             transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs)])
     elif dataset_name == 'mvtec_ad_all':
         dss = []
@@ -106,6 +116,13 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
         for cat in MULSEN_CLASSES:
             kwargs['category'] = cat
             dss.append(MULSENAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return GlobalIndexConcatDataset(dss)
+    elif dataset_name == 'grocery_all':
+        dss = []
+        for cat in GL_CLASSES:
+            kwargs['category'] = cat
+            dss.append(Grocery(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
         return GlobalIndexConcatDataset(dss)
     elif dataset_name == 'mpdd_all':
@@ -155,6 +172,13 @@ def build_dataset(*, dataset_name: str, data_root: str, train: bool, img_size: i
         for cat in LOCO_CLASSES:
             kwargs['category'] = cat
             dss.append(MVTecLOCO(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
+                transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
+        return GlobalIndexConcatDataset(dss)
+    elif dataset_name == 'btad_all':
+        dss = []
+        for cat in BTAD_CLASSES:
+            kwargs['category'] = cat
+            dss.append(BTAD(data_root=data_root, input_res=img_size, split='train' if train else 'test', \
                 transform=build_transforms(img_size, transform_type), is_mask=True, cls_label=True, **kwargs))
         return GlobalIndexConcatDataset(dss)
     else:

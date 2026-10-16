@@ -1,0 +1,1 @@
+{"dataset": "visa", "EPOCHS": 3000, "eval_every": 50, "ckpt_every": 10, "num_workers": 8}

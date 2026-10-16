@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional as F, InterpolationMode
+from PIL import ImageChops
 
 # breakfast_box  license.txt  readme.txt  splicing_connectors
 # juice_bottle   pushpins     screw_bag
@@ -107,14 +108,18 @@ class MVTecLOCO(Dataset):
             else:
                 inputs["anom_type"] = LOCO_TYPES.index(str(img_file).split("/")[-2])
             if self.is_mask:
-                mask_dir =  img_file.parent.parent.parent / 'ground_truth' / img_file.parent.name 
-                mask_file = mask_dir / img_file.name.replace('.png', '_mask.png')
-                if True: # 'good' == img_file.parent.name:
+                mask_dir =  img_file.parent.parent.parent / 'ground_truth' / img_file.parent.name / img_file.stem
+                if img_file.parent.name == 'good':
                     mask = Image.new('L', (self.input_res, self.input_res), 0)
-                # else:
-                    # with open(mask_file, 'rb') as f:
-                    #     mask = Image.open(f)
-                    #     mask = mask.convert('L')
+                else:
+                    all_masks = sorted(mask_dir.glob('*.png'))
+                    # take OR of all masks
+                    mask = Image.new('L', (self.input_res, self.input_res), 0)
+                    for mask_file in all_masks:
+                        with open(mask_file, 'rb') as f:
+                            mask_i = Image.open(f)
+                            mask_i = mask_i.convert('L')
+                            mask = ImageChops.lighter(mask, mask_i)
                 mask = self.mask_transform(mask)
                 inputs["mask"] = mask
             return inputs

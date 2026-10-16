@@ -904,7 +904,7 @@ class VelocityField(nn.Module):
             train_steps (int, optional): Number of training steps. Defaults to -1.
             t_scheduler_train (str, optional): Name of the t scheduler for training. Defaults to 'linear'.
             t_scheduler_infer (str, optional): Name of the t scheduler for inference. Defaults to 'linear'.
-            t_mu (float, optional): Mean of the Gaussian distribution for sampling t. Defaults to 0.0.
+            t_mu (float, optional): Mean of the Gaussian distribution for sampling t (the fixed t itself when t_scheduler_train='constant'). Defaults to 0.0.
             t_sigma (float, optional): Standard deviation of the Gaussian distribution for sampling t. Defaults to 1.0.
             cfg_interval (list, optional): Time interval which use classifier-free guidance. Defaults to [0.1, 1.0].
             cfg_scale (int): Cfg scale value. 
@@ -1078,6 +1078,9 @@ class VelocityField(nn.Module):
                 t = torch.rand(bs, device=device, dtype=x1.dtype)
         elif self.t_scheduler_train == 'logistic':
             t = logit_t(bs, device, self.t_mu, self.t_sigma).to(x1.dtype)
+        elif self.t_scheduler_train == 'constant':
+            # Fixed-timestep ablation: every sample is trained at t = t_mu (raw t, not a logit).
+            t = torch.full((bs,), self.t_mu, device=device, dtype=x1.dtype)
         elif self.t_scheduler_train in {'ddpm', 'discrete_uniform'}:
             n_steps = self.train_steps if self.train_steps > 0 else 1000
             s = torch.randint(1, n_steps + 1, (bs,), device=device)

@@ -1,0 +1,81 @@
+data:
+  category: all
+  data_root: data/mvtec_ad
+  dataset_name: mvtec_ad_all
+  img_size: 256
+  num_workers: 8
+  persistent_workers: false
+  pin_memory: true
+  test_batch_size: 8
+  transform_type: imagenet
+flow_matching:
+  loss_type: velocity
+  pred_type: velocity
+  scheduler:
+    name: affine_prob
+    t_mu: -2.1972246
+    t_scheduler_infer: linear
+    t_scheduler_train: logistic
+    t_sigma: 0.35
+  solver:
+    name: euler
+  train_steps: -1
+logging:
+  eval:
+    ablation_steps:
+    - -1
+    eval_strategy: recon
+    exact_divergence: false
+    hutchinson_batch_size: 2
+    hutchinson_samples: 10
+    img_score_agg: diff+sum
+    inv_steps: 20
+    inv_stop_time: 0.9
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+    num_recon_emsemble: 1
+    recon_steps: 100
+    save_dir: null
+    solver_name: euler
+    steps: 1
+  log_dir: logs/ad_mc_ditG_enet_0903/eval_2d_sweep/s0.1_n100/
+meta:
+  global_seed: 0
+  name: vfad
+  use_bfloat16: true
+model:
+  backbone:
+    feature_res: 32
+    model_name: efficientnet-b4
+    normalization: null
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    pretrained: true
+  class_dropout_prob: 0.0
+  cond_channels: 768
+  depth: 16
+  hidden_size: 2048
+  learn_sigma: false
+  mlp_ratio: 4.0
+  model_name: dit
+  num_heads: 16
+  num_views: 5
+  patch_size: 2
+  t_scale: 1000
+  use_class_labels: true
+resume:
+  resume_path: logs/ad_mc_ditG_enet_0903/checkpoints/ckpt_epoch_300.pth

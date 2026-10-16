@@ -1,0 +1,80 @@
+meta:
+  name: amdm
+
+data:
+  dataset_name: realiad_all
+  data_root: /home/acg17237wy/projects/FlowAD/data/realiad              # cluster: edit to local path
+  meta_dir: /home/acg17237wy/projects/FlowAD/data/realiad_meta/realiad_jsons   # cluster: edit to local path
+  category: all
+  img_size: 224            # OmiAD Appendix F: 224x224 input
+  transform_type: imagenet
+  train_batch_size: 4      # per-GPU; 8 GPUs -> global 32 (paper batch size)
+  test_batch_size: 32
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: false
+  latent_cache: disk       # 36,465 train latents -> one shared memmap (rank 0
+                           # extracts once), instead of a ~40GB dict PER RANK
+
+model:
+  backbone:
+    model_name: efficientnet-b4
+    pretrained: true
+    outblocks: [1, 5, 9, 21]     # stages 1-4 (24+32+56+160 = 272 ch)
+    outstrides: [2, 4, 8, 16]
+    normalization: null          # raw features, as in the paper
+  feature_size: 32               # each stage resized to 32x32 and concatenated
+  in_channels: 272
+  # guided-diffusion U-Net (paper's default arch; hyperparams = guided-diffusion
+  # 32x32 defaults, not specified in the paper)
+  model_channels: 128
+  num_res_blocks: 2
+  attention_ds: [2, 4]           # attention at 16x16 and 8x8
+  channel_mult: [1, 2, 2, 2]
+  num_heads: 4
+  num_head_channels: -1
+  use_scale_shift_norm: true
+  resblock_updown: false
+  dropout: 0.0
+
+diffusion:
+  num_timesteps: 1000
+  beta_start: 1.0e-4
+  beta_end: 0.02
+  p_min: 0.1
+  p_max: 0.4
+  k: 2.0
+
+opt:
+  lr: 1.0e-3                     # Adam, paper Appendix F
+  epochs: 300                   # UniAD-lineage convention
+  global_seed: 0
+  clip_grad: 1.0                 # stabilizer (uniform since round 2): no-clip
+                                 # runs collapsed to a constant predictor
+
+logging:
+  log_dir: baselines/amdm_repro/out/amdm_mc_unet_enet_realiad_0922/
+  log_step_freq: 100
+  ckpt_epoch_freq: 25            # rolling ckpt_last (no in-training eval)
+  ckpt_snapshot_freq: 200        # numbered snapshots: pre-collapse forensics
+  eval:
+    eval_during_training: false  # RealIAD protocol: train ALL epochs, then ONE
+                                 # final eval (EMA primary + raw) of the last ckpt
+    eval_epoch_freq: 50          # unused while eval_during_training is false
+    accumulate_rank0_only: true  # 114,585 x 224^2 eval maps: accumulate +
+                                 # compute metrics on rank 0 only (~29GB once,
+                                 # not per rank)
+    t_init: 960                  # paper-recommended initial diffusion step
+    recon_steps: 40              # 40-step DDIM reconstruction
+    img_score_agg: max           # UniAD-lineage image score
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+
+resume:
+  resume_path: null

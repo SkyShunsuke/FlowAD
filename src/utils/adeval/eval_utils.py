@@ -67,6 +67,36 @@ def aggregate_px_values(
         raise ValueError(f"Unknown aggregation method: {agg_method}")
     return scores
 
+@torch.no_grad()
+def average_precision_gpu(
+    gt_labels: torch.Tensor,
+    pred_scores: torch.Tensor,
+):
+    """Exact average precision on GPU (same definition as sklearn.metrics.average_precision_score).
+    AP = sum_k (R_k - R_{k-1}) * P_k over distinct thresholds in decreasing score order.
+    Args:
+        gt_labels: Binary ground truth labels of shape (N,).
+        pred_scores: Predicted scores of shape (N,).
+    Returns:
+        float: Average precision.
+    """
+    scores, order = torch.sort(pred_scores.reshape(-1), descending=True)
+    labels = gt_labels.reshape(-1)[order] > 0
+    del order
+    tps = torch.cumsum(labels, dim=0, dtype=torch.int64)
+    del labels
+    # -- keep the last index of each group of tied scores
+    distinct = torch.ones_like(scores, dtype=torch.bool)
+    distinct[:-1] = scores[1:] != scores[:-1]
+    del scores
+    idx = torch.nonzero(distinct).squeeze(1)
+    tps = tps[idx].double()
+    fps = (idx + 1).double() - tps
+    precision = tps / (tps + fps)
+    recall = tps / tps[-1]
+    recall_prev = torch.cat([recall.new_zeros(1), recall[:-1]])
+    return float(((recall - recall_prev) * precision).sum().item())
+
 def calculate_img_metrics(
     gt_labels: np.ndarray,
     pred_scores: np.ndarray,
@@ -137,10 +167,12 @@ def calculate_px_metrics(
     if 'px_aupr' in metrics:
         results_dict['px_aupr'] = results['p_aupr']
     
-    # -- use skleran for AP
+    # -- exact AP on GPU (sklearn's average_precision_score is too slow for all pixels)
     if 'px_ap' in metrics:
-        gt_bin = (gt_masks_flat > 0).astype(int)
-        ap = average_precision_score(gt_bin, pred_scores_flat)
+        ap = average_precision_gpu(
+            torch.from_numpy(gt_masks_flat).to(device),
+            torch.from_numpy(pred_scores_flat).to(device),
+        )
         results_dict['px_ap'] = ap
         
     # -- use f1_max_gpu_hist for F1-max

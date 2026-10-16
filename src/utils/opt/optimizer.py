@@ -142,8 +142,17 @@ def load_model_only(
     checkpoint = torch.load(resume_path, map_location=torch.device('cpu'), weights_only=True)
 
     # -- loading model
-    pretrained_dict = checkpoint['model']
-    msg = model.load_state_dict(pretrained_dict)
+    # full training checkpoint ({'model': ...}) or a bare state_dict
+    pretrained_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
+    new_dict = {}
+    for key, value in pretrained_dict.items():
+        if 'ema_model' in key:
+            continue
+        if 'v_embedder' in key:
+            continue
+        new_dict[key] = value
+    
+    msg = model.load_state_dict(new_dict)
     logger.info(f'loaded pretrained model with msg: {msg}')
     
     del checkpoint

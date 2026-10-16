@@ -32,6 +32,7 @@ def evaluate_inv(
     eval_params: dict = None,
     save_anomaps: bool = False,
     save_dir: str = None,
+    **kwargs,
 ):
     """Evaluate on the given dataset with inversion, returning AD metrics.
     Args:
@@ -134,7 +135,7 @@ def evaluate_inv(
         masks_all[ptr:end] = anom_masks.cpu().numpy().astype(np.uint8)[:bs_eff]
         anom_labels_all[ptr:end] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)[:bs_eff]
 
-        imgs = denormalize_image(imgs) * 255.0
+        imgs = denormalize_image(imgs).view(imgs.shape) * 255.0  # keep batch dim when B == 1
         imgs = imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)
         org_imgs_all[ptr:end] = imgs[:bs_eff]
         

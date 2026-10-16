@@ -293,7 +293,7 @@ class DiT(nn.Module):
         self.x_embedder_linear = nn.Linear(self.in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size, t_scale=t_scale)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
-        self.v_embedder = LabelEmbedder(num_views, hidden_size, class_dropout_prob)
+        # self.v_embedder = LabelEmbedder(num_views, hidden_size, class_dropout_prob)
         
         num_patches = self.x_embedder.num_patches
         self.num_patches = num_patches
@@ -337,7 +337,7 @@ class DiT(nn.Module):
 
         # Initialize label embedding table:
         nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
-        nn.init.normal_(self.v_embedder.embedding_table.weight, std=0.02)
+        # nn.init.normal_(self.v_embedder.embedding_table.weight, std=0.02)
         
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)

@@ -112,10 +112,13 @@ class DINOWrapper(nn.Module):
         return outputs, [outputs]  # Return the output and a list of features (single feature in this case)
 
 class DINO2Wrapper(nn.Module):
-    def __init__(self, model, out_blocks=None, out_res=None, **kwargs):
+    def __init__(self, model, out_blocks=None, out_res=None, final_norm=False, **kwargs):
         super(DINO2Wrapper, self).__init__()
         self.model = model
         self.out_blocks = out_blocks if out_blocks is not None else [-1]
+        # final_norm: take the last block after DINOv2's final LayerNorm (last_hidden_state);
+        # the pre-norm hidden state has a few massive-activation channels (std ~70 for ViT-g)
+        self.final_norm = final_norm
         self.out_res = out_res if out_res is not None else (16, 16)  # Default shape for DINOv2 Base
     
     def forward(self, x):
@@ -126,11 +129,15 @@ class DINO2Wrapper(nn.Module):
         Returns:
             torch.Tensor: Output features from the specified blocks.
         """
+        # patch 14: resize so the token grid matches out_res (e.g. 256px input -> 224px -> 16x16)
+        in_sz = (self.out_res[0] * 14, self.out_res[1] * 14)
+        if tuple(x.shape[-2:]) != in_sz:
+            x = F.interpolate(x, size=in_sz, mode='bicubic', align_corners=False)
         outputs = self.model(x)
         hidden_states = outputs.hidden_states
         out_features = []
         for blk in self.out_blocks:
-            state = hidden_states[blk][:, 1:]
+            state = outputs.last_hidden_state[:, 1:] if self.final_norm and blk == -1 else hidden_states[blk][:, 1:]
             state = rearrange(state, 'b (h w) c -> b c h w', h=self.out_res[0], w=self.out_res[1])
             out_features.append(state)
         out = torch.cat(out_features, dim=1)
@@ -160,9 +167,9 @@ def get_normalization_func(normalization_method=None):
     else:
         raise ValueError(f"Unsupported normalization method: {normalization_method}")
         
-def get_backbone_feature_shape(model_name):
+def get_backbone_feature_shape(model_name, feature_res=32):
     if model_name == "efficientnet-b4":
-        return (272, 16, 16)
+        return (272, feature_res, feature_res) # (272, 16, 16)
     elif model_name == "vae-kl16":
         return (16, 16, 16)
     elif model_name == "vae_ldm":
@@ -175,6 +182,8 @@ def get_backbone_feature_shape(model_name):
         return (768, 16, 16)
     elif model_name == "dinov2-large":
         return (1024, 16, 16)
+    elif model_name == "dinov2-giant":
+        return (1536, 16, 16)
     elif model_name == "dinov1-small":
         return (384, 14, 14)
     elif model_name == "dinov1-base":
@@ -211,6 +220,11 @@ def get_dino(model_name, **kwargs):
     elif model_name == "dinov2-large":
         from transformers import Dinov2Model
         model = Dinov2Model.from_pretrained("facebook/dinov2-large", output_hidden_states=True).eval()
+        model = DINO2Wrapper(model, **kwargs)
+        return model
+    elif model_name == "dinov2-giant":
+        from transformers import Dinov2Model
+        model = Dinov2Model.from_pretrained("facebook/dinov2-giant", output_hidden_states=True).eval()
         model = DINO2Wrapper(model, **kwargs)
         return model
     elif model_name == "dinov1-small":
@@ -316,16 +330,19 @@ def get_backbone(**kwargs):
         net = create_vae(**kwargs)
         return VAEWrapper(net)
     elif 'efficientnet' in model_name:
+        # feature_res: output map size at 256px input (32 = current default, 16 = older runs)
+        feature_res = kwargs.pop('feature_res', 32)
         net =  get_efficientnet(**kwargs)
-        return BackboneWrapper(net, scale_factors=[0.125, 0.25, 0.5, 1.0])
+        scale_factors = {32: [0.25, 0.5, 1, 2], 16: [0.125, 0.25, 0.5, 1.0]}[feature_res]
+        return BackboneWrapper(net, scale_factors=scale_factors)
     elif 'wide_resnet' in model_name:
         net = get_wrn(**kwargs)
         return WRNWrapper(net)
     elif 'dinov1' in model_name:
-        net = get_dino(model_name, **kwargs)
+        net = get_dino(**kwargs)
         return net
     elif 'dinov2' in model_name:
-        net = get_dino(model_name, **kwargs)
+        net = get_dino(**kwargs)
         return net
     elif 'siglip' in model_name:
         net = get_siglip(**kwargs)

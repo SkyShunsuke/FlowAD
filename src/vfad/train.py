@@ -36,6 +36,10 @@ def main(params, args):
     """
     # init distributed mode
     init_distributed_mode(args)
+    # use_tf32 (with use_bfloat16: false): fp32 weights/activations, TF32 matmuls. Single-GPU bf16 DiT-G diverged to NaN.
+    if params['opt'].get('use_tf32', False):
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
 
     rank = get_rank()
     world_size = get_world_size()
@@ -115,7 +119,8 @@ def main(params, args):
     train_sampler = torch.utils.data.distributed.DistributedSampler(
         dataset=train_dataset,
         num_replicas=world_size,
-        rank=rank)
+        rank=rank,
+        seed=params['opt']['global_seed'])  # default 0 == DistributedSampler default
     test_sampler = torch.utils.data.distributed.DistributedSampler(
         dataset=test_dataset,
         num_replicas=world_size,
@@ -145,7 +150,8 @@ def main(params, args):
                 f"Number of test samples: {len(test_dataset)}, "
                 f"Iterations per epoch: {ipe}")
     
-    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
+    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],
+                                         feature_res=params['model']['backbone'].get('feature_res', 32))
     fe = get_backbone(**params['model']['backbone'])
     feat_norm_method = params['model']['backbone'].get('normalization', None)
     
@@ -249,6 +255,11 @@ def main(params, args):
     eval_freq = params['logging']['eval']['eval_epoch_freq']
     eval_params = params['logging']['eval']
     save_best = params['logging']['ckpt'].get('save_best', True)
+    # track the best epoch (best_results.json, early stopping) without writing the best checkpoint
+    save_best_ckpt = params['logging']['ckpt'].get('save_best_ckpt', True)
+    # stop if mAD does not improve for this many epochs (<= 0 disables early stopping)
+    early_stop_patience = eval_params.get('early_stop_patience', -1)
+    best_epoch = 0
     
     # -- visualization setup
     vis_freq = params['logging'].get('vis', {}).get('vis_epoch_freq', None)
@@ -310,8 +321,8 @@ def main(params, args):
             # -- load images and labels
             imgs, labels = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
             path = batch["path"]
-            view_idx = batch["view"]  # (B,)
-            imgs, labels, view_idx = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True), view_idx.to(device, non_blocking=True)
+            # view_idx = batch["view"]  # (B,)
+            imgs, labels = imgs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
 
             # -- feature extraction (sample z1)
             start, end = CUDAEvent(enable_timing=True), CUDAEvent(enable_timing=True)
@@ -336,26 +347,37 @@ def main(params, args):
             fe_time = start.elapsed_time(end)  # [ms]
             fe_time_meter.step(fe_time)
 
-            # -- fwd pass of VF
-            with torch.amp.autocast("cuda", enabled=opt_params['use_bfloat16']):
-                start.record()
-                loss = vf(z1, labels)# , view_idx=view_idx)  
-                end.record()
+            # -- fwd/bwd pass of VF, optionally over micro-batches (e.g. 8 x 8 on 1 GPU to mimic 8-GPU DDP numerics)
+            micro_batches = opt_params.get('micro_batches', 1)
+            optimizer.zero_grad()
+            start.record()
+            loss = 0.0
+            for z1_mb, labels_mb in zip(z1.chunk(micro_batches), labels.chunk(micro_batches)):
+                with torch.amp.autocast("cuda", enabled=opt_params['use_bfloat16']):
+                    loss_mb = vf(z1_mb, labels_mb) / micro_batches
+                if opt_params['use_bfloat16']:
+                    scaler.scale(loss_mb).backward()
+                else:
+                    loss_mb.backward()
+                loss = loss + loss_mb.detach()
+            end.record()
             torch.cuda.synchronize()
             vf_time = start.elapsed_time(end)  # [ms]
             vf_time_meter.step(vf_time)
-            
-            # -- backward pass and optimization step
-            optimizer.zero_grad()
+
+            # -- optimization step
             if opt_params['use_bfloat16']:
-                scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                if opt_params['clip_grad'] > 0.0:
-                    torch.nn.utils.clip_grad_norm_(vf.parameters(), opt_params['clip_grad'])
-                scaler.step(optimizer)
+                # GradScaler is disabled under bf16, so guard against non-finite grads ourselves:
+                # a single NaN/Inf update would otherwise corrupt the weights permanently.
+                max_norm = opt_params['clip_grad'] if opt_params['clip_grad'] > 0.0 else float('inf')
+                grad_norm = torch.nn.utils.clip_grad_norm_(vf.parameters(), max_norm)
+                if torch.isfinite(grad_norm):
+                    scaler.step(optimizer)
+                else:
+                    logger.warning(f"Non-finite grad norm at epoch {epoch} step {step}; skipping update.")
                 scaler.update()
             else:
-                loss.backward()
                 if opt_params['clip_grad'] > 0.0:
                     torch.nn.utils.clip_grad_norm_(vf.parameters(), opt_params['clip_grad'])
                 optimizer.step()
@@ -453,17 +475,31 @@ def main(params, args):
                     
                 if mad > best_mad:
                     best_mad = mad
-                    save_checkpoint(
-                        save_path=os.path.join(ckpt_logdir, f'ckpt_best.pth'),
-                        epoch=epoch,
-                        model=vf,
-                        opt=optimizer,
-                        scaler=scaler,
-                        lr_scheduler=lr_scheduler,
-                        wd_scheduler=wd_scheduler,
-                        save_model_only=params['logging']['ckpt']['save_model_only'],
-                    )
+                    if save_best_ckpt:
+                        save_checkpoint(
+                            save_path=os.path.join(ckpt_logdir, f'ckpt_best.pth'),
+                            epoch=epoch,
+                            model=vf,
+                            opt=optimizer,
+                            scaler=scaler,
+                            lr_scheduler=lr_scheduler,
+                            wd_scheduler=wd_scheduler,
+                            save_model_only=params['logging']['ckpt']['save_model_only'],
+                        )
                     logger.info(f"New best model saved at epoch {epoch} with MAD: {best_mad:.4f}")
+                    best_epoch = epoch
+                    import json
+                    with open(os.path.join(log_dir, 'best_results.json'), 'w') as f:
+                        json.dump({'epoch': epoch, 'results': eval_results}, f, indent=2, default=float)
+            
+            # -- early stopping (decision made on the main process and shared)
+            if early_stop_patience > 0:
+                stop = torch.tensor([int(is_main() and epoch - best_epoch >= early_stop_patience)], device=device)
+                if args.distributed:
+                    dist.broadcast(stop, src=0)
+                if stop.item():
+                    logger.info(f"Early stopping at epoch {epoch}: MAD has not improved for {early_stop_patience} epochs.")
+                    break
         
         # -- visualization
         if epoch % vis_freq == 0 and is_main():
@@ -487,7 +523,8 @@ def main(params, args):
                 class_map=class_map
             )
             logger.info(f"Visualization samples saved at epoch {epoch}.")
-        torch.distributed.barrier()
+        if args.distributed:
+            torch.distributed.barrier()
             
         # -- save checkpoint
         if epoch % params['logging']['ckpt']['ckpt_epoch_freq'] == 0 and is_main():
@@ -525,8 +562,9 @@ def main(params, args):
             csv_logger.close()
         
     # -- close distributed process
-    dist.barrier()
-    dist.destroy_process_group()
+    if args.distributed:
+        dist.barrier()
+        dist.destroy_process_group()
 
     # -- end of main
     logger.info("Training completed. Training results are saved.")

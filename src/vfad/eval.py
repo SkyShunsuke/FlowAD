@@ -108,7 +108,8 @@ def main(params, args):
                 f"Number of test samples: {len(test_dataset)}, ")
     
     # build model    
-    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],)
+    feat_sz = get_backbone_feature_shape(model_name=params['model']['backbone']['model_name'],
+                                         feature_res=params['model']['backbone'].get('feature_res', 32))
     fe = get_backbone(**params['model']['backbone'])
     feat_norm_method = params['model']['backbone'].get('normalization', None)
 
@@ -198,6 +199,7 @@ def main(params, args):
                 distributed=args.distributed,
                 save_anomaps=eval_params.get('save_anomaps', False),
                 save_dir=eval_params.get('save_dir', None),
+                img_metric_only=eval_params.get('img_metric_only', True),
                 eval_params=eval_params,
                 train_loader=train_loader,
                 noise_shape=feat_sz,

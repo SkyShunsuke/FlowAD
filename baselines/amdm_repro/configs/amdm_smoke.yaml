@@ -1,0 +1,69 @@
+meta:
+  name: amdm
+
+data:
+  dataset_name: mpdd_all
+  data_root: data/mpdd
+  category: all
+  img_size: 224            # OmiAD Appendix F: 224x224 input
+  transform_type: imagenet
+  train_batch_size: 32     # single GPU -> global 32 (paper batch size)
+  test_batch_size: 32
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: false
+
+model:
+  backbone:
+    model_name: efficientnet-b4
+    pretrained: true
+    outblocks: [1, 5, 9, 21]     # stages 1-4 (24+32+56+160 = 272 ch)
+    outstrides: [2, 4, 8, 16]
+    normalization: null          # raw features, as in the paper
+  feature_size: 32               # each stage resized to 32x32 and concatenated
+  in_channels: 272
+  # guided-diffusion U-Net (paper's default arch; hyperparams = guided-diffusion
+  # 32x32 defaults, not specified in the paper)
+  model_channels: 128
+  num_res_blocks: 2
+  attention_ds: [2, 4]           # attention at 16x16 and 8x8
+  channel_mult: [1, 2, 2, 2]
+  num_heads: 4
+  num_head_channels: -1
+  use_scale_shift_norm: true
+  resblock_updown: false
+  dropout: 0.0
+
+diffusion:
+  num_timesteps: 1000
+  beta_start: 1.0e-4
+  beta_end: 0.02
+  p_min: 0.1
+  p_max: 0.4
+  k: 2.0
+
+opt:
+  lr: 1.0e-3                     # Adam, paper Appendix F
+  epochs: 4
+  global_seed: 0
+  clip_grad: 1.0                 # stabilizer: no-clip runs collapsed to a constant predictor (visa ep~5, mvtec ep~105)
+
+logging:
+  log_dir: baselines/amdm_repro/out/smoke/
+  log_step_freq: 100
+  eval:
+    eval_epoch_freq: 4
+    t_init: 960                  # paper-recommended initial diffusion step
+    recon_steps: 40              # user-prescribed 40-step reconstruction
+    img_score_agg: max           # UniAD-lineage image score
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+
+resume:
+  resume_path: null

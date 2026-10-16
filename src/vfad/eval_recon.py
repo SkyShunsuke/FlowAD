@@ -81,6 +81,7 @@ def evaluate_recon(
     clslabels_all = np.zeros((N,), dtype=np.uint8)
     anom_types_all = np.zeros((N,), dtype=np.uint8)
     anom_labels_all = np.zeros((N,), dtype=np.uint8)
+    view_idx_all = np.zeros((N,), dtype=np.uint8)
     mse_all = np.zeros((N, *img_sz), dtype=np.float32)
     org_imgs_all = np.zeros((N, img_sz[0], img_sz[1], 3), dtype=np.uint8)
     recon_imgs_all = np.zeros((N, img_sz[0], img_sz[1], 3), dtype=np.uint8)
@@ -98,8 +99,8 @@ def evaluate_recon(
         
         # -- prepare data
         imgs_local, clslabels_local = batch["img"], batch["clslabel"]    # (B, C, H, W), (B,)
-        view_idx_local = batch["view"]  # (B,)
-        imgs_local, clslabels_local, view_idx_local = imgs_local.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True), view_idx_local.to(device, non_blocking=True)
+       #  view_idx_local = batch["view"]  # (B,)
+        imgs_local, clslabels_local = imgs_local.to(device, non_blocking=True), clslabels_local.to(device, non_blocking=True)
         anom_labels_local, anom_masks_local = batch['label'], batch['mask'] # (B,), (B, H, W)
         anom_labels_local, anom_masks_local = anom_labels_local.to(device, non_blocking=True), anom_masks_local.to(device, non_blocking=True)
         idx_local = batch["index"].to(device, non_blocking=True)  # (B,)
@@ -120,16 +121,16 @@ def evaluate_recon(
         # -- reconstruction through the velocity field
         if use_bfloat16:
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time,) # view_idx=view_idx_local.repeat(num_recon_emsemble))  # (B, c, h, w)
+                z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
         else:
-            z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, start_t=inv_stop_time)# , view_idx=view_idx_local.repeat(num_recon_emsemble))
+            z1_local = vf.sample(zt, clslabels_rep, steps=recon_steps, start_t=inv_stop_time)
         z1_local = z1_local.reshape(num_recon_emsemble, len(z1), *z1.shape[1:]).mean(dim=0)  # (B, c, h, w)
             # z1_local = vf.sample_ddim(zt, clslabels_local, steps=recon_steps, solver_name=solver_name, solver_params=solver_params, start_t=inv_stop_time)  # (B, c, h, w)
             # z1_local = vf.reconstruct_edm(
             #     z1, sigma_start=eval_params.get('sigma_start', 0.5), steps=recon_steps, noise_base=noise_base.repeat(len(z1), 1, 1, 1)
         # -- compute reconstruction error as anomaly score
         mse_local = F.mse_loss(z1_local, z1, reduction='none').sum(dim=1)  # (B, h, w)
-        imgs_local = denormalize_image(imgs_local) * 255.0
+        imgs_local = denormalize_image(imgs_local).view(imgs_local.shape) * 255.0  # keep batch dim when B == 1
         
         # -- share results across GPUs
         if distributed:
@@ -139,6 +140,7 @@ def evaluate_recon(
             anom_masks = concat_all_gather(anom_masks_local)
             imgs = concat_all_gather(imgs_local)
             idx = concat_all_gather(idx_local)
+            # view_idx = concat_all_gather(view_idx_local)
         else:
             mse = mse_local
             anom_labels = anom_labels_local
@@ -146,6 +148,7 @@ def evaluate_recon(
             anom_masks = anom_masks_local
             imgs = imgs_local
             idx = idx_local
+            # view_idx = view_idx_local
         
         # -- compute anomaly scores
         mse = F.interpolate(
@@ -165,6 +168,7 @@ def evaluate_recon(
         clslabels_all[idx_np] = cls_labels.cpu().numpy().astype(np.uint8)
         masks_all[idx_np] = anom_masks.cpu().numpy().astype(np.uint8)
         anom_labels_all[idx_np] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
+        # view_idx_all[idx_np] = view_idx.cpu().numpy().astype(np.uint8)
     
     if distributed:
         torch.distributed.barrier()
@@ -195,6 +199,7 @@ def evaluate_recon(
             px_scores_by_class=px_scores_by_class,
             px_gts_by_class=px_gts_by_class,
             org_img_by_class=org_imgs_by_class,
+            # view_idx_by_class=view_idx_by_class,
             class_map=clsname_map,
             recon_imgs_by_class=recon_imgs_by_class,
         )
@@ -419,7 +424,7 @@ def evaluate_recon_grad(
         
         mse_local = F.mse_loss(z1_local, z1, reduction='none').sum(dim=1)  # (B, h, w)
         
-        imgs_local = denormalize_image(imgs_local) * 255.0
+        imgs_local = denormalize_image(imgs_local).view(imgs_local.shape) * 255.0  # keep batch dim when B == 1
         
         # -- share results across GPUs
         if distributed:

@@ -213,3 +213,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Baseline reproductions: keep code/configs, drop outputs, caches and cloned upstream repos
+baselines/*/out
+baselines/*/logs
+baselines/refpad_repro/cache_tokens_enet/
+baselines/DeCo-Diff/
+baselines/DiAD/
+baselines/DiffusionAD/
+baselines/ReFP-AD/
+# PBS job output
+*.o[0-9]*
+*.e[0-9]*

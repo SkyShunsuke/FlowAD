@@ -32,6 +32,7 @@ def evaluate_density(
     eval_params: dict = None,
     save_anomaps: bool = False,
     save_dir: str = None,
+    **kwargs,
 ):
     """Evaluate on the given dataset with density estimation, returning AD metrics.
     Args:
@@ -126,7 +127,7 @@ def evaluate_density(
         masks_all[current_idx: current_idx + bs] = anom_masks.cpu().numpy().astype(np.uint8)
         anom_labels_all[current_idx: current_idx + bs] = (anom_labels.cpu().numpy() > 0).astype(np.uint8)
 
-        imgs = denormalize_image(imgs) * 255.0
+        imgs = denormalize_image(imgs).view(imgs.shape) * 255.0  # keep batch dim when B == 1
         imgs = imgs.permute(0, 2, 3, 1).cpu().numpy().astype(np.uint8)  # (B, H, W, C)
         org_imgs_all[current_idx: current_idx + bs] = imgs
         

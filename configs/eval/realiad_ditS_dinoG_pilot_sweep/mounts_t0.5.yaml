@@ -1,0 +1,69 @@
+data:
+  category: mounts
+  data_root: data/realiad
+  dataset_name: realiad
+  img_size: 256
+  meta_dir: ./data/realiad_meta/realiad_jsons
+  num_workers: 8
+  persistent_workers: false
+  pin_memory: true
+  test_batch_size: 8
+  transform_type: imagenet
+flow_matching:
+  loss_type: velocity
+  pred_type: velocity
+  scheduler:
+    name: affine_prob
+    t_mu: -2.1972246
+    t_scheduler_infer: linear
+    t_scheduler_train: linear
+    t_sigma: 0.35
+  solver:
+    name: euler
+  train_steps: -1
+logging:
+  eval:
+    ablation_steps:
+    - -1
+    eval_strategy: recon
+    img_score_agg: diff+sum
+    inv_stop_time: 0.5
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+    num_recon_emsemble: 1
+    recon_steps: 1
+    save_dir: null
+    solver_name: euler
+    steps: 1
+  log_dir: logs/realiad_ditS_dinoG_pilot/mounts/eval_noise_sweep/t0.5/
+meta:
+  global_seed: 0
+  name: vfad
+  use_bfloat16: true
+model:
+  backbone:
+    final_norm: true
+    model_name: dinov2-giant
+    normalization: null
+    out_blocks:
+    - -1
+    pretrained: true
+  class_dropout_prob: 0.0
+  cond_channels: 384
+  depth: 12
+  hidden_size: 384
+  learn_sigma: false
+  mlp_ratio: 4.0
+  model_name: dit
+  num_heads: 6
+  patch_size: 1
+  t_scale: 1000
+  use_class_labels: true
+resume:
+  resume_path: logs/realiad_ditS_dinoG_pilot/mounts/checkpoints/ckpt_epoch_50.pth

@@ -1,0 +1,115 @@
+data:
+  category: all
+  data_root: data/mvtec_ad
+  dataset_name: mvtec_ad_all
+  img_size: 256
+  num_workers: 8
+  persistent_workers: false
+  pin_memory: true
+  test_batch_size: 8
+  train_batch_size: 8
+  transform_type: imagenet
+flow_matching:
+  loss_type: velocity
+  pred_type: velocity
+  scheduler:
+    name: affine_prob
+    t_mu: -2.1972246
+    t_scheduler_infer: linear
+    t_scheduler_train: logistic
+    t_sigma: 0.35
+  solver:
+    name: euler
+  train_steps: -1
+logging:
+  ckpt:
+    ckpt_epoch_freq: 500
+    save_best: true
+    save_latest: false
+    save_model_only: true
+    save_best_ckpt: false
+  eval:
+    eval_epoch_freq: 1
+    early_stop_patience: 10
+    img_score_agg: diff+sum
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    - px_auroc
+    - px_ap
+    - px_f1max
+    - px_aupro
+    solver_name: euler
+    steps: 1
+    inv_stop_time: 0.1
+    recon_steps: 1
+  log_dir: logs/ditG_enet_fm_fr16_tf32_bs8_p1_es10_seeds/ad_s1/
+  log_stdout: true
+  log_step_freq: 100
+  use_csv: true
+  use_tensorboard: true
+  vis:
+    denorm_type: imagenet
+    num_samples_per_class: 16
+    solver_name: midpoint
+    steps: 50
+    vis_epoch_freq: 500
+  wandb:
+    entity: shuns71
+    project_name: VFAD
+    run_name: ad_ditG_enet_fm_fr16_tf32_bs8_p1_es10_seed1
+    use_wandb: true
+meta:
+  name: vfad
+model:
+  backbone:
+    model_name: efficientnet-b4
+    normalization: null
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    pretrained: true
+    feature_res: 16
+  class_dropout_prob: 0.0
+  cond_channels: 768
+  depth: 16
+  hidden_size: 2048
+  learn_sigma: false
+  mlp_ratio: 4.0
+  model_name: dit
+  num_heads: 16
+  patch_size: 1
+  t_scale: 1000
+  use_class_labels: true
+  num_views: 5
+opt:
+  all_gather: false
+  bias_decay: false
+  clip_grad: 1.0
+  epochs: 300
+  fix_lr_strategy: const
+  fix_lr_thres: -1
+  fix_wd_strategy: const
+  fix_wd_thres: -1
+  global_seed: 1
+  ipe_scale: 1.0
+  lr_end: 5.0e-06
+  lr_start: 1.0e-06
+  lr_warmup: 5.0e-05
+  lr_warmup_epochs: 40
+  name: adamw
+  norm_decay: false
+  use_bfloat16: false
+  wd_end: 0.0
+  wd_start: 0.0
+  use_tf32: true
+resume:
+  resume_path: null
