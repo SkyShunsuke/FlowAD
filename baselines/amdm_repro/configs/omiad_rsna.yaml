@@ -1,0 +1,78 @@
+meta:
+  name: omiad
+
+data:
+  dataset_name: bmad
+  data_root: data
+  category: Chest-RSNA
+  img_size: 224            # OmiAD Appendix F: 224x224 input
+  transform_type: imagenet
+  train_batch_size: 32     # single GPU, paper batch size
+  test_batch_size: 64
+  num_workers: 16
+  pin_memory: true
+  persistent_workers: false
+
+model:
+  backbone:
+    model_name: efficientnet-b4
+    pretrained: true
+    outblocks: [1, 5, 9, 21]     # stages 1-4 (24+32+56+160 = 272 ch)
+    outstrides: [2, 4, 8, 16]
+    normalization: null          # raw features, as in the paper
+  feature_size: 32               # each stage resized to 32x32 and concatenated
+  in_channels: 272
+  # guided-diffusion U-Net (paper's default arch; hyperparams = guided-diffusion
+  # 32x32 defaults, not specified in the paper)
+  model_channels: 128
+  num_res_blocks: 2
+  attention_ds: [2, 4]           # attention at 16x16 and 8x8
+  channel_mult: [1, 2, 2, 2]
+  num_heads: 4
+  num_head_channels: -1
+  use_scale_shift_norm: true
+  resblock_updown: false
+  dropout: 0.0
+
+diffusion:
+  num_timesteps: 1000
+  beta_start: 1.0e-4
+  beta_end: 0.02
+  p_min: 0.1
+  p_max: 0.4
+  k: 2.0
+
+asd:                             # adversarial score distillation (OmiAD Alg. 1)
+  teacher_path: baselines/amdm_repro/out/amdm_rsna_1112/checkpoints/ckpt_epoch_300.pth
+  teacher_key: model             # raw epoch-300 weights: the AMDM EMA (0.9999) still carries ~19% of the random init after 16.8k steps on BTAD; same choice here for consistency
+  t_init: 960                    # fixed generator noise level (paper)
+  t_max: 990                     # Alg. 1
+  alpha: 1.0                     # paper
+  lambda_adv_theta: 1.0          # Alg. 1
+  lambda_adv_psi: 0.01           # Alg. 1
+  disc_norm: rms                 # RMS-normalised discriminator logit map (see train_omiad.py)
+  ema_rate: 0.999                # EMA of the generator
+
+opt:
+  lr_g: 1.0e-5                   # SiD / SiDA defaults (not specified in the paper for ASD)
+  lr_psi: 1.0e-5
+  betas: [0.0, 0.999]
+  epochs: 300                    # user-prescribed
+  global_seed: 0
+  clip_grad: 0.0
+
+logging:
+  log_dir: baselines/amdm_repro/out/omiad_rsna_1112/
+  log_step_freq: 100
+  eval:
+    eval_epoch_freq: 100
+    t_init: 960                  # paper-recommended initial diffusion step
+    recon_steps: 1               # one-step generator (Alg. 2)
+    eval_variants:               # final eval: UniAD-lineage max score (as amdm_repro) and FlowAD diff+sum
+    - {img_score_agg: max}
+    - {img_score_agg: diff+sum}
+    img_score_agg: max           # UniAD-lineage image score
+    metrics:                     # Chest-RSNA has no pixel masks: image-level metrics only (mAD = mean of 3)
+    - img_auroc
+    - img_ap
+    - img_f1max

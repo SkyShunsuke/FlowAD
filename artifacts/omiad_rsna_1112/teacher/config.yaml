@@ -1,0 +1,76 @@
+data:
+  category: Chest-RSNA
+  data_root: data
+  dataset_name: bmad
+  img_size: 224
+  num_workers: 16
+  persistent_workers: false
+  pin_memory: true
+  test_batch_size: 64
+  train_batch_size: 32
+  transform_type: imagenet
+diffusion:
+  beta_end: 0.02
+  beta_start: 0.0001
+  k: 2.0
+  num_timesteps: 1000
+  p_max: 0.4
+  p_min: 0.1
+logging:
+  eval:
+    eval_epoch_freq: 100
+    eval_variants:
+    - recon_steps: 40
+      t_init: 960
+    - recon_steps: 1
+      t_init: 960
+    img_score_agg: max
+    metrics:
+    - img_auroc
+    - img_ap
+    - img_f1max
+    recon_steps: 40
+    t_init: 960
+  log_dir: baselines/amdm_repro/out/amdm_rsna_1112/
+  log_step_freq: 100
+meta:
+  name: amdm
+model:
+  attention_ds:
+  - 2
+  - 4
+  backbone:
+    model_name: efficientnet-b4
+    normalization: null
+    outblocks:
+    - 1
+    - 5
+    - 9
+    - 21
+    outstrides:
+    - 2
+    - 4
+    - 8
+    - 16
+    pretrained: true
+  channel_mult:
+  - 1
+  - 2
+  - 2
+  - 2
+  dropout: 0.0
+  feature_size: 32
+  in_channels: 272
+  model_channels: 128
+  num_head_channels: -1
+  num_heads: 4
+  num_res_blocks: 2
+  resblock_updown: false
+  use_scale_shift_norm: true
+opt:
+  clip_grad: 1.0
+  epochs: 300
+  global_seed: 0
+  lr: 0.001
+resume:
+  resume_path: null

@@ -113,8 +113,7 @@ class BMAD(Dataset):
             img_file = self.img_files[index]
             label = self.labels[index]
         
-        cls_name_idx = -3 if self.split == 'train' else -4
-        cls_name = str(img_file).split(os.path.sep)[cls_name_idx]
+        cls_name = self.category
         with open(img_file, 'rb') as f:
             img = Image.open(f)
             img = img.convert('RGB')
@@ -145,7 +144,14 @@ class BMAD(Dataset):
                 #     with open(mask_file, 'rb') as f:
                 #         mask = Image.open(f)
                 #         mask = mask.convert('L')
-                mask = Image.new('L', (self.input_res, self.input_res), 0)
+                # masks live in <data_root>/<category>/ground_truth/<image name>; classes without
+                # pixel annotations (and all normal images) get a blank mask
+                mask_file = Path(self.data_root) / self.category / 'ground_truth' / img_file.name
+                if label == 0 or not mask_file.exists():
+                    mask = Image.new('L', (self.input_res, self.input_res), 0)
+                else:
+                    with open(mask_file, 'rb') as f:
+                        mask = Image.open(f).convert('L')
                 mask = self.mask_transform(mask)
                 inputs["mask"] = mask
             return inputs
